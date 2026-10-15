@@ -1,0 +1,6 @@
+platform:      { title: "platform",      topic: "Infra, deploys, services" }
+netops:        { title: "netops",        topic: "Routing, DNS, firewalls" }
+it-helpdesk:   { title: "it-helpdesk",   topic: "User requests & tickets" }
+backend:       { title: "backend",       topic: "App team" }
+data:          { title: "data",          topic: "Pipelines & reports" }
+oncall-alerts: { title: "oncall-alerts", topic: "Pages and alerts — respond fast" }

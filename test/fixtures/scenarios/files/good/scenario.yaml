@@ -1,0 +1,15 @@
+id: good
+title: Good one
+skills: [files]
+difficulty: 2
+channel: platform
+persona: marcus
+targets: [app01]
+vars:
+  NAME: { pick: [alpha, beta] }
+  PORT: { range: [20000, 20010] }
+  SECRET: { from_setup: true }
+message: "find {{NAME}} on port {{PORT}}"
+secret_context: "secret is {{SECRET}}"
+answer: { type: exact, extract: "the secret", value: "{{SECRET}}" }
+hints: [a, b, c]

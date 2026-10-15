@@ -1,0 +1,19 @@
+# tier 1 is unlocked from the start; others unlock when every `requires` skill reaches mastery 30
+files:           { title: "Files & navigation",   tier: 1, requires: [] }
+permissions:     { title: "Permissions & ownership", tier: 1, requires: [] }
+text-processing: { title: "Text processing",      tier: 1, requires: [] }
+processes:       { title: "Processes & signals",  tier: 1, requires: [] }
+users:           { title: "Users & groups",       tier: 1, requires: [] }
+systemd:         { title: "systemd services",     tier: 2, requires: [processes] }
+logs:            { title: "Logs & journald",      tier: 2, requires: [text-processing] }
+disks:           { title: "Disks & space",        tier: 2, requires: [files] }
+cron:            { title: "Scheduled jobs",       tier: 2, requires: [processes] }
+packages:        { title: "Packages (dpkg/apt)",  tier: 2, requires: [files] }
+ssh:             { title: "SSH & keys",           tier: 2, requires: [permissions, users] }
+ip-routing:      { title: "IP & routing",         tier: 3, requires: [ssh] }
+dns:             { title: "DNS",                  tier: 3, requires: [ip-routing] }
+ports-sockets:   { title: "Ports & sockets",      tier: 3, requires: [systemd] }
+firewall:        { title: "Firewall (nftables)",  tier: 3, requires: [ip-routing] }
+tls:             { title: "TLS & certificates",   tier: 3, requires: [ports-sockets] }
+packet-capture:  { title: "Packet capture",       tier: 3, requires: [ports-sockets, ip-routing] }
+incidents:       { title: "Multi-step incidents", tier: 3, requires: [logs, systemd, ip-routing] }

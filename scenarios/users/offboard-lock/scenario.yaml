@@ -1,0 +1,20 @@
+id: offboard-lock
+title: Offboard a leaver (lock, don't delete)
+skills: [users, ssh]
+difficulty: 2
+channel: platform
+persona: sam
+targets: [jump01]
+vars:
+  USER: { random: user }
+message: |
+  @dhan {{USER}} left today. disable their account on jump01 now — they must not be able to log in, in ANY way.
+  do NOT delete the account or home dir, legal hold.
+secret_context: |
+  {{USER}} has a password AND an SSH key in ~/.ssh/authorized_keys. Locking only the password (passwd -l) does NOT block
+  SSH key logins. Correct: lock password AND (set shell to nologin, or expire the account with usermod -e 1 / chage -E 0).
+  Home directory and account must remain. Sam will point out "they can still get in with their key" if only the password is locked.
+hints:
+  - "There's more than one way to log in. A locked password doesn't stop every one of them."
+  - "`passwd -l` locks the password only. Also expire the account (`usermod -e 1`) or set the shell to /usr/sbin/nologin."
+  - "sudo usermod -L -e 1 {{USER}}   (or: sudo passwd -l {{USER}} && sudo usermod -s /usr/sbin/nologin {{USER}})"

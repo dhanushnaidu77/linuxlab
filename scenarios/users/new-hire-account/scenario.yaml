@@ -1,0 +1,19 @@
+id: new-hire-account
+title: Account for a new hire
+skills: [users]
+difficulty: 1
+channel: it-helpdesk
+persona: raj
+targets: [jump01]
+vars:
+  USER: { random: user }
+message: |
+  Hi @dhan! INC-4902: new developer starting Monday — username `{{USER}}`. They need an account on jump01 with a
+  home directory, bash as the shell, and they should be in the `devs` group. Thanks a ton!
+secret_context: |
+  User {{USER}} doesn't exist yet. Group devs already exists. Requirements: home dir /home/{{USER}}, shell /bin/bash,
+  supplementary group devs. Raj doesn't care about the password (they'll use SSH keys later).
+hints:
+  - "There's a command to add users with options for home directory, shell and groups."
+  - "`useradd` needs `-m` to create the home dir; `-s` sets the shell; `-G` adds supplementary groups."
+  - "sudo useradd -m -s /bin/bash -G devs {{USER}} && id {{USER}}"

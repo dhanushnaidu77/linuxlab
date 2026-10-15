@@ -1,0 +1,19 @@
+id: reload-without-restart
+title: Change feeder rate without a restart
+skills: [processes, systemd]
+difficulty: 3
+channel: platform
+persona: marcus
+targets: [app01]
+vars:
+  RATE: { pick: ["25", "40", "75", "120"] }
+message: |
+  @dhan need the market feeder on app01 to run at rate={{RATE}} (config: /etc/kestrel/feeder.conf).
+  it holds open connections so a restart is NOT ok — same PID before and after. it supports config reload.
+secret_context: |
+  /opt/kestrel/feeder.py runs as a daemon (not a systemd unit). It re-reads its config on SIGHUP and writes the active rate to
+  /run/feeder.state. Restarting it (new PID) counts as failure. Marcus knows it "reloads on HUP like nginx used to".
+hints:
+  - "Many daemons re-read their config when they receive a particular signal instead of restarting."
+  - "Edit the config, then send SIGHUP to the process (`kill -HUP <pid>`). Verify it picked it up."
+  - "sudo sed -i 's/^rate=.*/rate={{RATE}}/' /etc/kestrel/feeder.conf && sudo pkill -HUP -f '[f]eeder.py' && cat /run/feeder.state"

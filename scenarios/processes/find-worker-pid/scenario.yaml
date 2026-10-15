@@ -1,0 +1,20 @@
+id: find-worker-pid
+title: PID of the queue worker
+skills: [processes]
+difficulty: 1
+channel: backend
+persona: tom
+targets: [app01]
+vars:
+  NAME: { pick: [queue-worker, mailer, thumbnailer] }
+  PID: { from_setup: true }
+message: |
+  yo @dhan what's the PID of the {{NAME}} process on app01? wanna attach a profiler to it
+secret_context: |
+  A single {{NAME}} process is running on app01 with PID {{PID}}. There's also a "{{NAME}}-old.log" file and a grep process
+  would show up if the user greps ps naively, which can confuse them.
+answer: { type: number, extract: "the PID", value: "{{PID}}" }
+hints:
+  - "List processes and filter by name."
+  - "`pgrep` prints PIDs by process name; `ps aux | grep` works too but also matches the grep itself."
+  - "ssh app01 pgrep -x {{NAME}}"

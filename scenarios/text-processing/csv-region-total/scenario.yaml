@@ -1,0 +1,21 @@
+id: csv-region-total
+title: Revenue total for one region
+skills: [text-processing]
+difficulty: 3
+channel: data
+persona: ana
+targets: [app01]
+vars:
+  REGION: { pick: [EMEA, APAC, NA, LATAM] }
+  TOTAL: { from_setup: true }
+message: |
+  @dhan my notebook env is down and finance needs one number in 10 min 😩 — total of the `revenue` column for region {{REGION}}
+  in /srv/data/sales.csv on app01. integer is fine, it's in whole dollars
+secret_context: |
+  sales.csv has a header row: date,region,product,units,revenue. Revenue is an integer. The total for {{REGION}} is {{TOTAL}}.
+  Rows are clean (exact region names). The header row must not break the sum.
+answer: { type: number, extract: "the revenue total", value: "{{TOTAL}}" }
+hints:
+  - "awk can split on commas, filter rows by a column, and keep a running sum."
+  - "Use `awk -F,` and compare `$2` to the region, adding `$5` to a variable; print it in an END block."
+  - "awk -F, '$2==\"REGION\" {s+=$5} END {print s}' /srv/data/sales.csv"

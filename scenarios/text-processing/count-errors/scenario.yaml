@@ -1,0 +1,19 @@
+id: count-errors
+title: How many API errors today?
+skills: [text-processing]
+difficulty: 1
+channel: platform
+persona: marcus
+targets: [app01]
+vars:
+  COUNT: { from_setup: true }
+message: |
+  @dhan for the incident review: how many ERROR lines are in /var/log/kestrel/api.log on app01? just the number
+secret_context: |
+  The log has {{COUNT}} lines with level ERROR, plus WARN/INFO lines. Some INFO lines contain the word "error" in lowercase
+  inside the message (e.g. "retrying after error") — those must NOT be counted. Only the ERROR level field counts.
+answer: { type: number, extract: "the number of ERROR lines", value: "{{COUNT}}" }
+hints:
+  - "You want to filter lines by a pattern and count the matches."
+  - "`grep -c` counts matching lines. Be careful: some INFO lines mention 'error' in lowercase — match the level field exactly."
+  - "ssh app01 \"grep -c ' ERROR ' /var/log/kestrel/api.log\""

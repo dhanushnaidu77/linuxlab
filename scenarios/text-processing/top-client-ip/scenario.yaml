@@ -1,0 +1,20 @@
+id: top-client-ip
+title: Who is hammering the web server?
+skills: [text-processing, logs]
+difficulty: 2
+channel: netops
+persona: leah
+targets: [web01]
+vars:
+  TOP: { from_setup: true }
+message: |
+  @dhan web01 is seeing a request spike. Can you tell me which client IP made the most requests in
+  /var/log/nginx/kestrel.access.log? I want to check it against the firewall logs.
+secret_context: |
+  The access log has a few thousand lines from ~15 IPs. {{TOP}} has the most requests by a clear margin.
+  Leah knows nginx combined log format: the client IP is the first field.
+answer: { type: exact, extract: "the client IP address", value: "{{TOP}}" }
+hints:
+  - "Extract the first field of each line, then count how often each value appears."
+  - "The classic pipeline: awk (or cut) → sort → uniq -c → sort -n."
+  - "awk '{print $1}' /var/log/nginx/kestrel.access.log | sort | uniq -c | sort -rn | head"

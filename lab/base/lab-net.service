@@ -1,0 +1,12 @@
+[Unit]
+Description=Kestrel lab networking (default route + resolver)
+DefaultDependencies=no
+Before=network.target ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lab-net.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

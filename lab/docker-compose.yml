@@ -1,0 +1,88 @@
+name: kestrel-lab
+
+x-host: &host
+  cgroup: private
+  cap_add: [SYS_ADMIN, NET_ADMIN, NET_RAW]
+  security_opt: [apparmor=unconfined]
+  tmpfs: [/run, /run/lock, /tmp]
+  stop_grace_period: 5s
+  restart: unless-stopped
+
+services:
+  base:
+    image: lab/base
+    build: ./base
+    profiles: [build-only]
+
+  rtr01:
+    <<: *host
+    image: lab/rtr01
+    build: ./rtr01
+    container_name: rtr01
+    hostname: rtr01
+    sysctls: { net.ipv4.ip_forward: "1" }
+    networks:
+      office: { ipv4_address: 10.10.1.1 }
+      dmz: { ipv4_address: 10.10.2.1 }
+      backend: { ipv4_address: 10.10.3.1 }
+
+  jump01:
+    <<: *host
+    image: lab/jump01
+    build: ./jump01
+    container_name: jump01
+    hostname: jump01
+    environment: { LAB_GW: 10.10.1.1 }
+    networks:
+      office: { ipv4_address: 10.10.1.10 }
+
+  web01:
+    <<: *host
+    image: lab/web01
+    build: ./web01
+    container_name: web01
+    hostname: web01
+    environment: { LAB_GW: 10.10.2.1 }
+    networks:
+      dmz: { ipv4_address: 10.10.2.10 }
+
+  app01:
+    <<: *host
+    image: lab/app01
+    build: ./app01
+    container_name: app01
+    hostname: app01
+    environment: { LAB_GW: 10.10.3.1 }
+    networks:
+      backend: { ipv4_address: 10.10.3.10 }
+
+  db01:
+    <<: *host
+    image: lab/db01
+    build: ./db01
+    container_name: db01
+    hostname: db01
+    environment: { LAB_GW: 10.10.3.1 }
+    networks:
+      backend: { ipv4_address: 10.10.3.20 }
+
+  ns01:
+    <<: *host
+    image: lab/ns01
+    build: ./ns01
+    container_name: ns01
+    hostname: ns01
+    environment: { LAB_GW: 10.10.3.1 }
+    networks:
+      backend: { ipv4_address: 10.10.3.53 }
+
+networks:
+  office:
+    internal: true
+    ipam: { config: [{ subnet: 10.10.1.0/24, gateway: 10.10.1.254 }] }
+  dmz:
+    internal: true
+    ipam: { config: [{ subnet: 10.10.2.0/24, gateway: 10.10.2.254 }] }
+  backend:
+    internal: true
+    ipam: { config: [{ subnet: 10.10.3.0/24, gateway: 10.10.3.254 }] }

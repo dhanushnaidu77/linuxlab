@@ -1,0 +1,12 @@
+[Unit]
+Description=Seed kestrel database
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/db-init.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

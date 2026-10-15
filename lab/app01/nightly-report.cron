@@ -1,0 +1,2 @@
+# nightly finance report
+30 2 * * * kestrel /opt/kestrel/nightly-report.sh

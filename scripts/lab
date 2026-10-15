@@ -1,0 +1,12 @@
+#!/bin/bash
+# Manage the Kestrel lab containers.  usage: scripts/lab build|up|down|reset [host]|status
+set -euo pipefail
+cd "$(dirname "$0")/../lab"
+case "${1:-status}" in
+  build)  docker compose build base && docker compose build ;;
+  up)     docker compose up -d ;;
+  down)   docker compose down -v ;;
+  reset)  if [ -n "${2:-}" ]; then docker compose up -d --force-recreate --no-deps "$2"; else docker compose down -v && docker compose up -d; fi ;;
+  status) for h in jump01 rtr01 web01 app01 db01 ns01; do printf '%-7s %s\n' "$h" "$(docker exec "$h" systemctl is-system-running 2>/dev/null || true)"; done ;;
+  *) echo "usage: $0 build|up|down|reset [host]|status" >&2; exit 2 ;;
+esac

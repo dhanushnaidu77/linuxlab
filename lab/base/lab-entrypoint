@@ -1,0 +1,6 @@
+#!/bin/sh
+# systemd needs a writable cgroup tree; cgroupns=private confines this to our own subtree
+mount -o remount,rw /sys/fs/cgroup 2>/dev/null || true
+# hand docker's env (LAB_GW etc.) to systemd units
+env | grep '^LAB_' > /etc/lab.env || true
+exec /sbin/init

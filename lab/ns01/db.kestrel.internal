@@ -1,0 +1,14 @@
+$TTL 300
+@   IN SOA ns01.kestrel.internal. hostmaster.kestrel.internal. (
+        2026101501 ; serial
+        3600 600 86400 300 )
+    IN NS ns01.kestrel.internal.
+ns01    IN A 10.10.3.53
+jump01  IN A 10.10.1.10
+rtr01   IN A 10.10.1.1
+web01   IN A 10.10.2.10
+app01   IN A 10.10.3.10
+db01    IN A 10.10.3.20
+www     IN CNAME web01
+api     IN CNAME app01
+db      IN CNAME db01

@@ -1,0 +1,19 @@
+id: report-never-ran
+title: Nightly report didn't run
+skills: [cron, logs]
+difficulty: 2
+channel: platform
+persona: priya
+targets: [app01]
+vars: {}
+message: |
+  @dhan finance says they didn't get today's nightly report 😬😬 it's supposed to be generated on app01 every night.
+  can you fix whatever's wrong AND get them today's report now? they're waiting 🙏
+secret_context: |
+  /etc/cron.d/nightly-report was edited with the wrong permissions (group-writable, 664) — cron refuses to load it and logs
+  "WRONG FILE MODE" to the journal (journalctl -u cron). Today's report /srv/reports/report-YYYY-MM-DD.csv must exist and be
+  owned by kestrel (the job runs as kestrel). Priya doesn't know what cron is.
+hints:
+  - "Scheduled jobs on Linux are usually cron. Find the job definition and check cron's own logs."
+  - "`journalctl -u cron` shows why cron skipped a file. Files in /etc/cron.d must not be group/world-writable."
+  - "sudo chmod 644 /etc/cron.d/nightly-report && sudo -u kestrel /opt/kestrel/nightly-report.sh"

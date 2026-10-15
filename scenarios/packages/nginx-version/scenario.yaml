@@ -1,0 +1,20 @@
+id: nginx-version
+title: Exact nginx version for the CVE review
+skills: [packages]
+difficulty: 1
+channel: platform
+persona: sam
+targets: [web01]
+vars:
+  VER: { from_setup: true }
+  UP: { from_setup: true }
+message: |
+  @dhan CVE review: what exact version of the nginx package is installed on web01? package version please, not a guess.
+secret_context: |
+  The installed Debian package version of nginx on web01 is {{VER}} (upstream {{UP}}). Sam accepts the full package version
+  or the upstream part.
+answer: { type: regex, extract: "the version string", value: "^v?({{VER}}|{{UP}})$" }
+hints:
+  - "The package manager knows exactly what's installed. nginx itself can also report its version."
+  - "`dpkg -l nginx` or `apt-cache policy nginx` shows the package version; `nginx -v` the upstream one."
+  - "ssh web01 \"dpkg-query -W -f='\\${Version}\\n' nginx\""

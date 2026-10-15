@@ -1,0 +1,19 @@
+id: uploads-full
+title: Uploads volume is full
+skills: [disks, files]
+difficulty: 2
+channel: oncall-alerts
+persona: alertbot
+alert: true
+targets: [app01]
+vars:
+  JUNK: { pick: [export-tmp, render-cache, old-builds] }
+message: |
+  [FIRING] DiskAlmostFull — app01:/srv/uploads 96% used. @dhan
+secret_context: |
+  /srv/uploads is a 64M volume. A forgotten hidden directory /srv/uploads/.{{JUNK}} holds ~55M of junk temp files.
+  /srv/uploads/customer-docs/ holds real customer files that must NOT be deleted. Goal: usage below 50% without touching customer-docs.
+hints:
+  - "First find out WHICH directory under /srv/uploads is big. Hidden (dot) directories count too."
+  - "`df -h /srv/uploads` for the volume, `du -sh /srv/uploads/* /srv/uploads/.[!.]*` or `du -ah | sort -h` to find the culprit."
+  - "sudo du -sh /srv/uploads/.[!.]* /srv/uploads/*   then remove the junk temp dir (NOT customer-docs)"

@@ -1,0 +1,19 @@
+id: largest-archive-dir
+title: Which archive dir is biggest?
+skills: [disks]
+difficulty: 1
+channel: data
+persona: ana
+targets: [db01]
+vars:
+  BIG: { from_setup: true }
+message: |
+  @dhan planning a cleanup on db01 — under /srv/archive there's one dir per year/month. which one takes up the most space? (dir name)
+secret_context: |
+  /srv/archive has ~10 subdirectories (e.g. 2025-03) with many small files each; {{BIG}} is the largest in total size,
+  though it does NOT have the most files (so counting files gives the wrong answer).
+answer: { type: regex, extract: "the directory name", value: "(^|/){{BIG}}/?$" }
+hints:
+  - "You need the total size of each directory, not the size of the directory entry itself (ls -l shows 4096 for dirs)."
+  - "`du -s` summarizes a directory; `-h` for human sizes; pipe to `sort -h`."
+  - "ssh db01 'du -sh /srv/archive/* | sort -h | tail -3'"

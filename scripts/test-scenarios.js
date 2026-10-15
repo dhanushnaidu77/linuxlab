@@ -23,9 +23,7 @@ const selected = [...scenarios.values()].filter((s) => !filters.length || filter
 
 function resetHosts(hosts) {
   execFileSync('docker', ['compose', 'up', '-d', '--force-recreate', '--no-deps', ...hosts], { cwd: path.join(cfg.root, 'lab'), stdio: 'ignore' });
-  for (const h of hosts) {
-    try { execFileSync('docker', ['exec', h, 'timeout', '90', 'systemctl', 'is-system-running', '--wait'], { stdio: 'ignore' }); } catch { /* degraded is reported by the check itself */ }
-  }
+  execFileSync(path.join(cfg.root, 'scripts', 'lab'), ['wait', ...hosts], { stdio: 'ignore' });
 }
 
 const results = [];

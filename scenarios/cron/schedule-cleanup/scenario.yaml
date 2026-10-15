@@ -1,0 +1,18 @@
+id: schedule-cleanup
+title: Schedule the temp cleanup script
+skills: [cron]
+difficulty: 1
+channel: backend
+persona: tom
+targets: [app01]
+vars: {}
+message: |
+  @dhan can you make /opt/kestrel/cleanup-tmp.sh on app01 run every 15 minutes? it should run as the kestrel user not root.
+  thx!! 🙏
+secret_context: |
+  The script exists and works. Any of these is fine: kestrel's personal crontab (crontab -u kestrel -e) with */15,
+  or a file in /etc/cron.d with the kestrel user field. Running as root is wrong.
+hints:
+  - "cron schedules have five time fields: minute hour day-of-month month day-of-week."
+  - "Every 15 minutes = `*/15 * * * *`. Edit the kestrel user's crontab with `crontab -u kestrel -e`."
+  - "(sudo crontab -u kestrel -l 2>/dev/null; echo '*/15 * * * * /opt/kestrel/cleanup-tmp.sh') | sudo crontab -u kestrel -"

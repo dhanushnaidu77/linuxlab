@@ -1,0 +1,21 @@
+id: which-package-owns
+title: Which package installed this binary?
+skills: [packages]
+difficulty: 2
+channel: platform
+persona: sam
+targets: [jump01]
+vars:
+  BIN: { pick: [/usr/bin/dig, /usr/bin/tcpdump, /usr/bin/nmap, /usr/bin/ss, /usr/bin/mtr, /usr/bin/nc.openbsd] }
+  PKG: { from_setup: true }
+message: |
+  @dhan inventory question: which package does {{BIN}} on jump01 come from? need the package name for the SBOM.
+secret_context: |
+  {{BIN}} belongs to the Debian package {{PKG}}. Note that the binary name often differs from the package name.
+  Gotcha: on Ubuntu 24.04 some packages still register the file as /bin/<name> (usrmerge), so `dpkg -S /usr/bin/<name>`
+  may say "no path found" — then `dpkg -S /bin/<name>` or `dpkg -S <name>` works.
+answer: { type: regex, extract: "the package name", value: "^{{PKG}}(:amd64)?$" }
+hints:
+  - "dpkg keeps a list of every file each package installed. You can search it by path."
+  - "`dpkg -S <path>` answers 'which package owns this file?'. If it says 'no path found', try the /bin/... path (usrmerge)."
+  - "dpkg -S {{BIN}} || dpkg -S $(basename {{BIN}})"

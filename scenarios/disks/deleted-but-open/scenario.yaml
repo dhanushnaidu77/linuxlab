@@ -1,0 +1,19 @@
+id: deleted-but-open
+title: Disk full but du shows nothing
+skills: [disks, processes]
+difficulty: 4
+channel: platform
+persona: marcus
+targets: [app01]
+vars: {}
+message: |
+  @dhan weird one: /srv/logs on app01 shows 90%+ used in df, but du on that dir says it's basically empty.
+  someone already "cleaned up" the big debug log. space didn't come back. sort it out without rebooting.
+secret_context: |
+  A process named debug-logger has /srv/logs/app-debug.log open; the file was deleted (rm) but the process still holds the
+  file descriptor, so the blocks are not freed. Fix: restart/kill debug-logger, or truncate via /proc/<pid>/fd/<n>.
+  Marcus suspects "deleted but open file" but wants you to find it.
+hints:
+  - "When df and du disagree, the space is often held by files that were deleted but are still open by a process."
+  - "`lsof +L1` (or `lsof | grep deleted`) lists open files with zero links. Then deal with the process holding it."
+  - "sudo lsof +L1 /srv/logs   → note PID/FD → sudo kill <PID>   (or: sudo truncate -s0 /proc/<PID>/fd/<FD>)"

@@ -1,0 +1,19 @@
+id: add-user-key
+title: Give a developer SSH access with their key
+skills: [ssh, users]
+difficulty: 2
+channel: it-helpdesk
+persona: raj
+targets: [jump01, app01]
+vars:
+  USER: { pick: [omar, fatima, pieter] }
+message: |
+  Hi @dhan, INC-4933: {{USER}} needs SSH access to app01 as their own user ({{USER}}). They sent me their public key,
+  I dropped it at /home/dhan/inbox/{{USER}}.pub on jump01. Can you set it up? Thanks a ton!
+secret_context: |
+  User {{USER}} exists on app01 with no ~/.ssh. Their public key is in /home/dhan/inbox/{{USER}}.pub on jump01 (the private key
+  is with the developer). Correct: ~{{USER}}/.ssh (700) and authorized_keys (600) owned by {{USER}}, containing the key.
+hints:
+  - "SSH key auth reads the public keys from ~/.ssh/authorized_keys of the target user, on the target host."
+  - "Copy the key to app01, then create ~USER/.ssh/authorized_keys with sudo, with the right owner and modes (700/600)."
+  - "cat ~/inbox/{{USER}}.pub | ssh app01 'sudo install -d -m700 -o {{USER}} -g {{USER}} ~{{USER}}/.ssh && sudo tee -a ~{{USER}}/.ssh/authorized_keys && sudo chown {{USER}}: ~{{USER}}/.ssh/authorized_keys && sudo chmod 600 ~{{USER}}/.ssh/authorized_keys'"

@@ -1,12 +1,29 @@
 #!/bin/bash
-# Manage the Kestrel lab containers.  usage: scripts/lab build|up|down|reset [host]|status
+# Manage the Kestrel lab containers.
+#   scripts/lab build | up | down | status | reset [host] | wait [host...]
 set -euo pipefail
 cd "$(dirname "$0")/../lab"
+HOSTS=(jump01 rtr01 web01 app01 db01 ns01)
+
+# block until systemd inside each host has finished booting (running or degraded)
+wait_ready() {
+  local h s
+  for h in "$@"; do
+    for _ in $(seq 120); do
+      s=$(docker exec "$h" systemctl is-system-running 2>/dev/null || true)
+      case $s in running|degraded) break ;; esac
+      sleep 0.5
+    done
+  done
+}
+
 case "${1:-status}" in
   build)  docker compose build base && docker compose build ;;
-  up)     docker compose up -d ;;
+  up)     docker compose up -d && wait_ready "${HOSTS[@]}" ;;
   down)   docker compose down -v ;;
-  reset)  if [ -n "${2:-}" ]; then docker compose up -d --force-recreate --no-deps "$2"; else docker compose down -v && docker compose up -d; fi ;;
-  status) for h in jump01 rtr01 web01 app01 db01 ns01; do printf '%-7s %s\n' "$h" "$(docker exec "$h" systemctl is-system-running 2>/dev/null || true)"; done ;;
-  *) echo "usage: $0 build|up|down|reset [host]|status" >&2; exit 2 ;;
+  reset)  if [ -n "${2:-}" ]; then docker compose up -d --force-recreate --no-deps "$2" && wait_ready "$2"
+          else docker compose down -v && docker compose up -d && wait_ready "${HOSTS[@]}"; fi ;;
+  wait)   shift; wait_ready "${@:-${HOSTS[@]}}" ;;
+  status) for h in "${HOSTS[@]}"; do printf '%-7s %s\n' "$h" "$(docker exec "$h" systemctl is-system-running 2>/dev/null || true)"; done ;;
+  *) echo "usage: $0 build|up|down|status|reset [host]|wait [host...]" >&2; exit 2 ;;
 esac

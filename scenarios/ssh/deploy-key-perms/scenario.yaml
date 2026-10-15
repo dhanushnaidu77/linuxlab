@@ -1,0 +1,20 @@
+id: deploy-key-perms
+title: Deploy user can't SSH into web01
+skills: [ssh, permissions]
+difficulty: 2
+channel: backend
+persona: tom
+targets: [web01, jump01]
+vars:
+  BREAK: { pick: [home, sshdir, authkeys] }
+message: |
+  @dhan deploys are failing — `ssh deploy@web01` from jump01 keeps asking for a password even though the key is set up.
+  it worked last week! someone did a "permissions cleanup" on web01 I think
+secret_context: |
+  On web01 the deploy user's {{BREAK}} permissions were loosened (home dir 777, or ~/.ssh 777, or authorized_keys 666).
+  sshd's StrictModes refuses keys when these are group/world-writable, and logs "Authentication refused: bad ownership or modes"
+  to the journal of ssh.service on web01. The key itself is correct. Tom tests with: ssh deploy@web01 from jump01 as dhan.
+hints:
+  - "The server side keeps a log of why it refused the key. Look at sshd's logs on web01."
+  - "sshd's StrictModes rejects keys if the home dir, ~/.ssh or authorized_keys is writable by group/others."
+  - "ssh web01 'sudo journalctl -u ssh -n 20'; then: sudo chmod 755 ~deploy; sudo chmod 700 ~deploy/.ssh; sudo chmod 600 ~deploy/.ssh/authorized_keys"

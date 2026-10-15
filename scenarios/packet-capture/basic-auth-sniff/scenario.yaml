@@ -1,0 +1,20 @@
+id: basic-auth-sniff
+title: Which account is sending plaintext credentials?
+skills: [packet-capture, tls]
+difficulty: 4
+channel: platform
+persona: sam
+targets: [app01]
+vars:
+  USER: { pick: [svc-reports, svc-billing, svc-legacy, svc-sync] }
+message: |
+  @dhan IDS says something on app01 sends HTTP Basic auth over plain HTTP to web01 every few seconds. which username is it using?
+  I need it to rotate that account's password.
+secret_context: |
+  A loop on app01 runs `curl -u {{USER}}:<password> http://web01.kestrel.internal/private/` every 2s. Capturing port 80 with
+  payload (-A) shows "Authorization: Basic <base64>"; base64 -d gives "{{USER}}:<password>". Sam wants just the username.
+answer: { type: exact, extract: "the username", value: "{{USER}}" }
+hints:
+  - "Capture the HTTP traffic with the packet payload visible, then look at the request headers."
+  - "`sudo tcpdump -ni eth0 -A 'tcp dst port 80'` and look for the `Authorization: Basic` header. It's base64, not encryption."
+  - "ssh app01 \"sudo tcpdump -lni eth0 -A -c 20 'tcp dst port 80' | grep Authorization\"  then: echo <b64> | base64 -d"

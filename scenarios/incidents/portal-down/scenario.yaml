@@ -1,0 +1,19 @@
+id: portal-down
+title: Customers can't reach the portal
+skills: [incidents, systemd, logs]
+difficulty: 4
+channel: oncall-alerts
+persona: diane
+alert: true
+targets: [web01, app01]
+vars: {}
+message: |
+  @dhan Customers are reporting the portal is down. Both the site and the API. What's going on and when will it be fixed?
+secret_context: |
+  Two independent faults: (1) on web01 someone edited /etc/nginx/sites-available/kestrel and dropped a semicolon (index line),
+  then restarted nginx, which failed — so nginx is down; (2) on app01 kestrel-api was stopped during a maintenance and never restarted.
+  Both http://web01.kestrel.internal/ and /api/health must work. Diane wants status + ETA, not technical details.
+hints:
+  - "Work from the outside in: what does curl to the portal say? Then check each service along the path (web01 nginx → app01 api)."
+  - "On web01: `systemctl status nginx`, `sudo nginx -t` shows the config error with a line number. Then check the API on app01."
+  - "ssh web01: fix the missing ';' that `sudo nginx -t` reports, sudo systemctl start nginx. ssh app01: sudo systemctl start kestrel-api"

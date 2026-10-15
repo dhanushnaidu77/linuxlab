@@ -1,0 +1,1 @@
+on web01 'openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj /CN=web01.kestrel.internal -keyout /etc/nginx/ssl/kestrel.key -out /etc/nginx/ssl/kestrel.crt 2>/dev/null && nginx -t 2>/dev/null && systemctl reload nginx && sleep 1'

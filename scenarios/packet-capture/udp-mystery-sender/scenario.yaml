@@ -1,0 +1,22 @@
+id: udp-mystery-sender
+title: Who keeps sending UDP to db01?
+skills: [packet-capture]
+difficulty: 3
+channel: netops
+persona: leah
+targets: [db01]
+vars:
+  SRC: { pick: [app01, web01, jump01] }
+  PORT: { range: [30000, 39999] }
+  SRCIP: { from_setup: true }
+message: |
+  @dhan db01's conntrack shows a steady trickle of UDP to port {{PORT}}, nothing listens there. Which host is sending it?
+  give me the source IP. a capture on db01 should tell you.
+secret_context: |
+  {{SRC}} ({{SRCIP}}) runs a forgotten loop sending a small UDP datagram to db01:{{PORT}} every second. Capture on db01 with
+  tcpdump to see the source IP. Leah wants the IP address.
+answer: { type: exact, extract: "the source IP address", value: "{{SRCIP}}" }
+hints:
+  - "Capture packets on db01's interface, filtered to that UDP port."
+  - "`sudo tcpdump -ni eth0 udp port <port>` — `-n` keeps addresses numeric. A few packets are enough (`-c 5`)."
+  - "ssh db01 'sudo tcpdump -ni eth0 -c 3 udp port {{PORT}}'"

@@ -157,3 +157,11 @@ test('auto-spawn respects pause, clients, interval and open-task cap', async () 
   for (let i = 0; i < 6; i++) { clock.t += 60 * MIN; await tm.tick(); }
   assert.equal(db.openTasks().length, 3);
 });
+
+test('cancelOpen closes all open tasks without penalty', async () => {
+  const { db, tm } = harness({ scenarios: [fix, { ...fix, id: 'f2' }] });
+  await tm.spawn({ force: true }); await tm.spawn({ force: true });
+  tm.cancelOpen('the lab was reset');
+  assert.equal(db.openTasks().length, 0);
+  assert.deepEqual(db.getMastery(), {});
+});

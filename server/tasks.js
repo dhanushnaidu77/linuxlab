@@ -183,6 +183,15 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
     return true;
   }
 
+  // lab reset wipes planted faults: cancel open tasks without penalty
+  function cancelOpen(reason) {
+    for (const task of db.openTasks()) {
+      db.updateTask(task.id, { state: 'error', closedAt: now() });
+      post({ channel: task.channel, taskId: task.id, author: 'system', body: `Task cancelled: ${reason}.` });
+      taskChanged(task.id);
+    }
+  }
+
   function scheduleNext() {
     const iv = db.getSetting('interval', DEFAULT_INTERVAL);
     nextSpawnAt = now() + (iv.min + rng() * (iv.max - iv.min)) * 60000;
@@ -204,7 +213,7 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
   }
 
   return {
-    spawn, reply, hint, skip, tick, summary,
+    spawn, reply, hint, skip, tick, summary, cancelOpen,
     setClientCount: (n) => { clientCount = n; },
     nextSpawnAt: () => nextSpawnAt,
     rescheduleSpawn: scheduleNext,

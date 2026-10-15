@@ -1,0 +1,19 @@
+id: broken-resolver
+title: Jump host can't resolve anything
+skills: [dns, files]
+difficulty: 2
+channel: it-helpdesk
+persona: raj
+targets: [jump01]
+vars:
+  BAD: { pick: [10.10.3.99, 10.10.1.53, 192.168.1.1] }
+message: |
+  Hi @dhan, INC-4951: several people say `ssh web01` from jump01 gives "Could not resolve hostname".
+  Did something change on jump01? (yes I know that's your box too 😅)
+secret_context: |
+  /etc/resolv.conf on jump01 was changed to "nameserver {{BAD}}" (a dead server) and the "search kestrel.internal" line removed.
+  The correct resolver is ns01 = 10.10.3.53 with search domain kestrel.internal (so short names like web01 work).
+hints:
+  - "Name resolution config on Linux lives in a small file under /etc. Which server is jump01 asking?"
+  - "Look at /etc/resolv.conf. Our DNS server is ns01 (10.10.3.53). Short names need a `search` line."
+  - "printf 'nameserver 10.10.3.53\\nsearch kestrel.internal\\n' | sudo tee /etc/resolv.conf"

@@ -1,0 +1,20 @@
+id: add-a-record
+title: New DNS name for the metrics dashboard
+skills: [dns]
+difficulty: 2
+channel: netops
+persona: leah
+targets: [ns01]
+vars:
+  NAME: { pick: [grafana, metrics, status, wiki] }
+  IP: { pick: [10.10.3.10, 10.10.2.10] }
+message: |
+  @dhan please add `{{NAME}}.kestrel.internal` → {{IP}} to our zone on ns01. bump the serial, and make sure the zone
+  still loads clean — last time someone fat-fingered it and the whole zone went down.
+secret_context: |
+  ns01 runs bind9 (named) as master for kestrel.internal, zone file /etc/bind/db.kestrel.internal.
+  Needs: an A record for {{NAME}}, serial incremented, named-checkzone OK, and named reloaded (rndc reload or systemctl reload named).
+hints:
+  - "Find the zone file in bind's config (/etc/bind/named.conf.local). Add a line in the same format as the others."
+  - "Increment the serial in the SOA, validate with `named-checkzone kestrel.internal <file>`, then `sudo rndc reload`."
+  - "echo '{{NAME}} IN A {{IP}}' | sudo tee -a /etc/bind/db.kestrel.internal; bump serial; sudo named-checkzone kestrel.internal /etc/bind/db.kestrel.internal && sudo rndc reload; dig @ns01 {{NAME}}.kestrel.internal"

@@ -1,0 +1,1 @@
+on ns01 'cp /etc/bind/db.kestrel.internal /root/zone.orig; sed -i "s/^db01\(\s\+IN A\s\+\).*/db01\1$WRONG/" /etc/bind/db.kestrel.internal; s=$(grep -oE "[0-9]{10}" /etc/bind/db.kestrel.internal | head -1); sed -i "s/$s/$((s+1))/" /etc/bind/db.kestrel.internal; rndc reload >/dev/null'

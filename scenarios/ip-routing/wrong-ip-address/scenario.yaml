@@ -1,0 +1,22 @@
+id: wrong-ip-address
+title: web01 vanished after a "migration test"
+skills: [ip-routing]
+difficulty: 3
+channel: netops
+persona: leah
+targets: [web01]
+vars:
+  NEWIP: { pick: [10.10.2.11, 10.10.2.37, 10.10.2.99, 10.10.2.142] }
+message: |
+  @dhan someone was testing an IP change on web01 by hand and now web01.kestrel.internal (10.10.2.10) doesn't answer at all.
+  DNS is correct, so put the box back on its proper address please. I don't know what IP they moved it to 🙄
+secret_context: |
+  web01's eth0 address was changed from 10.10.2.10/24 to {{NEWIP}}/24 (and the default route re-added via 10.10.2.1).
+  Gotcha: deleting a primary address also deletes secondary addresses on that subnet, so "add .10 then del {{NEWIP}}" leaves
+  nothing. Do it in one command (flush + add + route) so the ssh session dropping doesn't matter.
+  It's still on the dmz subnet 10.10.2.0/24. You can find it with a ping sweep / nmap -sn of 10.10.2.0/24 and ssh to the new IP.
+  Fix: re-add 10.10.2.10/24 (removing {{NEWIP}} is cleaner) and keep the default route via 10.10.2.1.
+hints:
+  - "The box is probably still on the same subnet, just at a different address. How do you find live hosts on a /24?"
+  - "From jump01: `nmap -sn 10.10.2.0/24` (ping sweep). Then ssh to the IP you find and look at `ip addr`."
+  - "ssh <found-ip> 'sudo sh -c \"ip addr flush dev eth0 && ip addr add 10.10.2.10/24 dev eth0 && ip route replace default via 10.10.2.1\"'  (your session to the old IP will hang — that's expected; then ssh web01)"

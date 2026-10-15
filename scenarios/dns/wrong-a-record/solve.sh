@@ -1,0 +1,1 @@
+on ns01 'sed -i "s/^db01\(\s\+IN A\s\+\).*/db01\110.10.3.20/" /etc/bind/db.kestrel.internal; s=$(grep -oE "[0-9]{10}" /etc/bind/db.kestrel.internal | head -1); sed -i "s/$s/$((s+1))/" /etc/bind/db.kestrel.internal; rndc reload >/dev/null'

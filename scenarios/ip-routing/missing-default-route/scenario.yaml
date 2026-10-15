@@ -1,0 +1,19 @@
+id: missing-default-route
+title: app01 is unreachable from the office
+skills: [ip-routing, ssh]
+difficulty: 3
+channel: netops
+persona: leah
+targets: [app01]
+vars: {}
+message: |
+  @dhan app01 dropped off — ping/ssh from the office net (10.10.1.0/24) time out, yet db01 on the same backend subnet says it can
+  still talk to app01 fine. Smells like L3 on app01 itself. Can you take a look and fix it?
+secret_context: |
+  app01's default route (via 10.10.3.1, rtr01) was deleted. Hosts on 10.10.3.0/24 can still reach it (directly connected),
+  but replies to other subnets have no route. You can't ssh to app01 from jump01 directly; you must hop through a host on
+  the same subnet (e.g. ssh -J db01 app01, or ssh db01 then ssh app01). Leah will suggest "jump through something on the backend subnet" if asked.
+hints:
+  - "If app01 can't send replies off its subnet, connect from a machine that's ON its subnet (10.10.3.0/24)."
+  - "`ssh -J db01 app01` jumps through db01. Then check `ip route` on app01 — what's missing?"
+  - "ssh -J db01 app01 'sudo ip route add default via 10.10.3.1'"

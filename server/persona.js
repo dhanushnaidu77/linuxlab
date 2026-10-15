@@ -7,7 +7,7 @@ const CANNED = {
   pass: ['thanks!! 🙏', 'perfect, that did it. thank you', 'confirmed on my side, appreciate it', 'legend, thanks'],
   fail: (r) => [`hmm still not right on my end: ${r}`, `doesn't look fixed yet — ${r}`, `still seeing it: ${r}`],
   nudge: ['any update on this?', 'hey, any luck with this one?', 'bumping this — still an issue'],
-  chat: ["not sure tbh, can you take a look?", "I don't know more than what I said, sorry", 'ok'],
+  chat: ["not sure tbh — I only know what I wrote above. can you take a look?", "I don't know more than what I said, sorry 🤷", 'no idea, that\'s why I pinged you 😅'],
 };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 

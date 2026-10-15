@@ -1,0 +1,22 @@
+id: shared-group-dir
+title: Shared folder for the finance team
+skills: [permissions, users]
+difficulty: 2
+channel: it-helpdesk
+persona: raj
+targets: [app01]
+vars:
+  U1: { pick: [jenny, fatima, grace] }
+  U2: { pick: [omar, noah, tariq] }
+message: |
+  Hi @dhan, INC-4870: finance wants a shared folder on app01 at /srv/shared/finance.
+  Everyone in the `finance` group ({{U1}} and {{U2}}) should be able to create and edit files there, and see each other's files.
+  Nobody outside finance should be able to even look inside. Can you set that up? 🙏
+secret_context: |
+  Group finance exists with members {{U1}} and {{U2}}; user carlos is NOT in finance. The directory doesn't exist yet.
+  Correct solution: group-owned by finance, mode 2770 (setgid so new files inherit the finance group; no access for others).
+  Raj doesn't know about setgid, but will report "{{U2}} can't edit {{U1}}'s files" type problems.
+hints:
+  - "Think about three things: who owns the directory (group), what the group/others can do, and which group *new files* get."
+  - "`chgrp finance` + `chmod 770` handles access. The setgid bit on a directory (`chmod g+s`) makes new files inherit the directory's group."
+  - "sudo mkdir -p /srv/shared/finance && sudo chgrp finance /srv/shared/finance && sudo chmod 2770 /srv/shared/finance"

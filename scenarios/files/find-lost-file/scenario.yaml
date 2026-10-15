@@ -1,0 +1,21 @@
+id: find-lost-file
+title: Find Jenny's lost spreadsheet
+skills: [files]
+difficulty: 1
+channel: it-helpdesk
+persona: raj
+targets: [app01]
+vars:
+  WORD: { random: word }
+  FILEPATH: { from_setup: true }
+message: |
+  Hi @dhan 👋 ticket INC-4821 — Jenny from accounting saved "q3-budget-{{WORD}}.xlsx" on the app01 file share
+  (somewhere under /srv) and now can't find it. Could you tell me the full path so I can send it to her? thanks a ton!
+secret_context: |
+  The file is at {{FILEPATH}}, buried in a deep directory tree among many decoy files. Raj has no idea where; Jenny only
+  remembers it was "on the server, under /srv somewhere".
+answer: { type: exact, extract: "the full path of the file", value: "{{FILEPATH}}" }
+hints:
+  - "Searching by name across a whole directory tree is a classic job for one specific command."
+  - "Try `find` with `-name` and a wildcard, starting at /srv. Remember to ssh to app01 first."
+  - "ssh app01, then: find /srv -name 'q3-budget-<word>.xlsx' (watch out for the old decoys)"

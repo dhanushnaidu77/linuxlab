@@ -1,0 +1,48 @@
+#!/bin/bash
+# Scaffold a new scenario: scripts/new-scenario <skill> <id>
+set -euo pipefail
+[ $# -eq 2 ] || { echo "usage: $0 <skill> <id>" >&2; exit 2; }
+skill=$1 id=$2
+root="$(cd "$(dirname "$0")/.." && pwd)"
+grep -q "^$skill:" "$root/data-defs/skills.yaml" || { echo "unknown skill '$skill' (see data-defs/skills.yaml)" >&2; exit 1; }
+dir="$root/scenarios/$skill/$id"
+[ -e "$dir" ] && { echo "$dir already exists" >&2; exit 1; }
+mkdir -p "$dir"
+
+cat > "$dir/scenario.yaml" <<YAML
+id: $id
+title: TODO short title
+skills: [$skill]
+difficulty: 1
+channel: platform
+persona: marcus
+targets: [app01]
+vars:
+  NAME: { random: word }
+message: |
+  hey @dhan ...
+secret_context: |
+  What is really going on (only the persona sees this).
+# answer: { type: exact, extract: "the thing they asked for", value: "{{NAME}}" }
+hints:
+  - "nudge"
+  - "direction"
+  - "exact command"
+YAML
+
+printf '%s\n' \
+  "# Runs on the console host. Use: on <host> '<cmd>'  or  on <host> <<'X' ... X" \
+  "# Print KEY=value lines to define from_setup vars." \
+  "on app01 'true'" > "$dir/setup.sh"
+
+printf '%s\n' \
+  "# exit 0 = pass. On failure: fail '<what the coworker would observe>'" \
+  "on app01 'true' || fail 'still broken'" > "$dir/check.sh"
+
+printf '%s\n' \
+  "# Reference solution for the self-test (npm run test:scenarios -- $id)." \
+  "# Print ANSWER=... for answer scenarios." \
+  "on app01 'true'" > "$dir/solve.sh"
+
+printf '%s\n' '## What was wrong' '' '## Fix' '```bash' '```' '' '## Other ways' > "$dir/solution.md"
+echo "created $dir"

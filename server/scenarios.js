@@ -5,7 +5,7 @@ import YAML from 'yaml';
 export const HOSTS = ['jump01', 'rtr01', 'web01', 'app01', 'db01', 'ns01'];
 const ANSWER_TYPES = ['exact', 'regex', 'number', 'set'];
 const WORDS = ['falcon', 'orbit', 'cedar', 'quartz', 'nimbus', 'ember', 'harbor', 'atlas', 'willow', 'cobalt', 'sierra', 'delta'];
-const USERS = ['jenny', 'omar', 'li.wei', 'carlos', 'fatima', 'noah', 'hana', 'pieter', 'grace', 'tariq'];
+const USERS = ['jenny', 'omar', 'liwei', 'carlos', 'fatima', 'noah', 'hana', 'pieter', 'grace', 'tariq'];
 
 // mulberry32: small seeded PRNG so tests (and self-tests) are reproducible
 export function seededRng(seed) {

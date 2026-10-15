@@ -1,1 +1,150 @@
-<!doctype html><title>placeholder</title>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kestrel Console</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐧</text></svg>">
+  <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <!-- login -->
+  <div id="login" class="login hidden">
+    <form id="login-form" class="login-card">
+      <div class="login-brand">🐧 Kestrel Labs</div>
+      <p class="muted">Ops console — sign in</p>
+      <input id="login-pw" type="password" placeholder="Password" autocomplete="current-password" autofocus>
+      <button type="submit" class="btn primary">Sign in</button>
+      <p id="login-err" class="err"></p>
+    </form>
+  </div>
+
+  <!-- app -->
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <div class="brand">🐧 Kestrel Labs <span class="muted">console</span></div>
+      <div class="status">
+        <span id="lab-status" class="pill" title="Lab containers">lab …</span>
+        <span id="persona-status" class="pill" title="Persona replies"></span>
+        <span id="spawn-status" class="pill muted"></span>
+      </div>
+      <div class="progress">
+        <span id="streak" title="Days in a row with a solved task"></span>
+        <span id="level"></span>
+        <div class="xpbar" title="XP to next level"><div id="xpfill"></div></div>
+        <span id="xp" class="muted"></span>
+      </div>
+      <div class="actions">
+        <button id="btn-new" class="btn" title="Request a new ticket now">＋ New ticket</button>
+        <button id="btn-split" class="btn ghost" title="Split view (Ctrl+\)">⫴</button>
+        <button id="btn-settings" class="btn ghost" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <div class="tabs">
+        <button class="tab active" data-tab="chat">💬 Chat</button>
+        <button class="tab" data-tab="term">⌨ Terminal</button>
+      </div>
+      <div id="side-chat" class="side-pane">
+        <div class="side-section">
+          <div class="side-title">Channels</div>
+          <ul id="channel-list" class="list"></ul>
+        </div>
+        <div class="side-section">
+          <div class="side-title">Direct messages</div>
+          <ul id="dm-list" class="list"></ul>
+        </div>
+        <div class="side-section">
+          <div class="side-title">Open tickets <span id="open-count" class="count"></span></div>
+          <ul id="task-list" class="list tasks"></ul>
+        </div>
+        <details class="side-section" id="skills-box">
+          <summary class="side-title">Skills</summary>
+          <ul id="skill-list" class="skills"></ul>
+        </details>
+      </div>
+      <div id="side-term" class="side-pane hidden">
+        <div class="side-section">
+          <div class="side-title">Sessions</div>
+          <ul id="session-list" class="list"></ul>
+          <button id="btn-new-session" class="btn small wide">＋ New session</button>
+        </div>
+        <p class="muted small pad">Every session starts on <code>jump01</code>. Use <code>ssh &lt;host&gt;</code> to reach the others.</p>
+      </div>
+    </aside>
+
+    <main id="main" class="main view-chat">
+      <section id="chat-view" class="chat">
+        <div class="channel">
+          <div class="channel-head">
+            <div><span id="channel-title" class="channel-title"></span> <span id="channel-topic" class="muted"></span></div>
+          </div>
+          <div id="channel-msgs" class="msgs"></div>
+          <div class="channel-foot muted small">Reply to a request in its thread →</div>
+        </div>
+        <div id="thread" class="thread hidden">
+          <div class="thread-head">
+            <div>
+              <div class="thread-title" id="thread-title"></div>
+              <div class="muted small" id="thread-meta"></div>
+            </div>
+            <button id="thread-close" class="btn ghost small" title="Close thread">✕</button>
+          </div>
+          <div id="thread-msgs" class="msgs"></div>
+          <div id="typing" class="typing hidden"></div>
+          <form id="composer" class="composer">
+            <textarea id="composer-text" rows="2" placeholder="Reply… (Enter to send, Shift+Enter for newline)"></textarea>
+            <div class="composer-actions">
+              <button type="button" id="btn-hint" class="btn ghost small">💡 Hint</button>
+              <button type="button" id="btn-skip" class="btn ghost small">Skip</button>
+              <button type="submit" class="btn primary small">Send</button>
+            </div>
+          </form>
+        </div>
+      </section>
+      <section id="term-view" class="term">
+        <div id="term-host" class="term-host"></div>
+        <div id="term-empty" class="empty muted">No terminal sessions. <button id="btn-new-session-2" class="btn small">Open one</button></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- settings -->
+  <dialog id="settings" class="modal">
+    <form method="dialog" class="modal-body">
+      <h2>Settings</h2>
+      <label class="row"><input type="checkbox" id="set-paused"> Pause (no new tickets or follow-ups)</label>
+      <div class="row">New ticket every
+        <input type="number" id="set-min" min="1" max="240" class="num"> –
+        <input type="number" id="set-max" min="1" max="240" class="num"> minutes (random)</div>
+      <label class="row"><input type="checkbox" id="set-tailscale"> Allow access over Tailscale (100.64.0.0/10)</label>
+      <button type="button" id="set-save" class="btn primary small">Save</button>
+      <hr>
+      <h3>Lab</h3>
+      <div class="row">
+        <select id="reset-host">
+          <option value="">whole lab</option>
+          <option>jump01</option><option>rtr01</option><option>web01</option><option>app01</option><option>db01</option><option>ns01</option>
+        </select>
+        <button type="button" id="btn-reset" class="btn danger small">Reset</button>
+        <button type="button" id="btn-start" class="btn small">Start lab</button>
+      </div>
+      <p class="muted small">Reset recreates containers from their images and cancels open tickets (no penalty).</p>
+      <p id="lab-msg" class="small"></p>
+      <hr>
+      <div class="row spread">
+        <button type="button" id="btn-logout" class="btn ghost small">Log out</button>
+        <button class="btn small">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/vendor/xterm/lib/xterm.js"></script>
+  <script src="/vendor/xterm-fit/lib/addon-fit.js"></script>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>

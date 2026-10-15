@@ -100,10 +100,10 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
 
   async function close(task, scn, state) {
     db.updateTask(task.id, { state, closedAt: now() });
-    post({ channel: task.channel, taskId: task.id, author: 'system', kind: 'solution', body: render(readSolution(scn), task.vars) });
-    try { await runner.optional(scn, 'cleanup.sh', task.vars); } catch (e) { log(`cleanup failed for ${scn.id}: ${e.message}`); }
     taskChanged(task.id);
+    post({ channel: task.channel, taskId: task.id, author: 'system', kind: 'solution', body: render(readSolution(scn), task.vars) });
     broadcast({ type: 'progress' });
+    try { await runner.optional(scn, 'cleanup.sh', task.vars); } catch (e) { log(`cleanup failed for ${scn.id}: ${e.message}`); }
   }
 
   async function runChecks(task, scn, extracted, loose) {

@@ -1,0 +1,18 @@
+id: biggest-file
+title: Which export is eating space?
+skills: [files, disks]
+difficulty: 1
+channel: data
+persona: ana
+targets: [app01]
+vars:
+  BIG: { from_setup: true }
+message: |
+  @dhan quick one — /srv/exports on app01 has a bunch of export files. which single file is the biggest? just need the filename
+secret_context: |
+  There are ~12 files of random sizes; the largest is {{BIG}}. Ana wants the file name (not a path is fine either way).
+answer: { type: regex, extract: "the file name (or path) of the biggest file", value: "(^|/){{BIG}}$" }
+hints:
+  - "`ls` can sort by size, and so can `du`."
+  - "`ls -lS` sorts largest first; add `-h` for human-readable sizes."
+  - "ssh app01 'ls -lSh /srv/exports | head -3'"

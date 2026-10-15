@@ -1,0 +1,18 @@
+id: script-not-executable
+title: Report script says "Permission denied"
+skills: [permissions]
+difficulty: 1
+channel: data
+persona: ana
+targets: [app01]
+vars: {}
+message: |
+  @dhan the nightly report job on app01 is failing — log just says `/opt/kestrel/nightly-report.sh: Permission denied`.
+  it runs as the kestrel user. can you fix it? I didn't touch anything I swear
+secret_context: |
+  Someone ran chmod 644 on /opt/kestrel/nightly-report.sh and chowned it to ana:ana, so it's not executable.
+  It must be executable by the kestrel user (who runs the cron job). Ana doesn't know who changed it.
+hints:
+  - "Look at the file's mode bits and owner with `ls -l`."
+  - "It needs the execute bit (`chmod +x`). Check that the kestrel user can run it afterwards."
+  - "sudo chmod 755 /opt/kestrel/nightly-report.sh && sudo -u kestrel /opt/kestrel/nightly-report.sh"

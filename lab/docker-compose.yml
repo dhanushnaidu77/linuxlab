@@ -2,7 +2,7 @@ name: kestrel-lab
 
 x-host: &host
   cgroup: private
-  cap_add: [SYS_ADMIN, NET_ADMIN, NET_RAW]
+  cap_add: [SYS_ADMIN, NET_ADMIN, NET_RAW, SYS_PTRACE]  # SYS_PTRACE: ss -p / lsof / strace on other users' processes
   security_opt: [apparmor=unconfined]
   tmpfs: [/run, /run/lock, /tmp]
   stop_grace_period: 5s

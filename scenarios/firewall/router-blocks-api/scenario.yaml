@@ -1,0 +1,21 @@
+id: router-blocks-api
+title: Portal /api broken after firewall change
+skills: [firewall, ip-routing]
+difficulty: 3
+channel: netops
+persona: leah
+targets: [rtr01]
+vars: {}
+message: |
+  @dhan I pushed a firewall change on rtr01 this morning to block the DMZ from reaching postgres in the backend.
+  Now https://www/api/... returns 504s 🤦‍♀️ Can you fix the ruleset so the DMZ→postgres block stays but the API works again?
+  And make sure it survives a reboot this time.
+secret_context: |
+  On rtr01, /etc/nftables.conf (and the live ruleset) contains two new forward rules for traffic from 10.10.2.0/24 to 10.10.3.0/24:
+  "tcp dport 5432 drop" (intended) and "tcp dport 8080 drop" (mistake — kills web01 → app01 API proxying).
+  Fix: remove the 8080 rule in /etc/nftables.conf AND the live ruleset (e.g. edit file then `nft -f /etc/nftables.conf` or
+  `systemctl reload nftables`). The 5432 block must remain.
+hints:
+  - "The router's firewall is nftables. Compare the live ruleset with what the API traffic looks like (web01 → app01:8080)."
+  - "`sudo nft list ruleset` shows the live rules; /etc/nftables.conf is what loads at boot. Fix the file, then load it."
+  - "On rtr01: delete the 'tcp dport 8080 drop' line in /etc/nftables.conf, then: sudo nft -c -f /etc/nftables.conf && sudo systemctl reload nftables"

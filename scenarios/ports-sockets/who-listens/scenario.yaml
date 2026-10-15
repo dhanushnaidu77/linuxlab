@@ -1,0 +1,20 @@
+id: who-listens
+title: What's listening on that port?
+skills: [ports-sockets]
+difficulty: 1
+channel: platform
+persona: sam
+targets: [app01]
+vars:
+  PORT: { random: port }
+  PROC: { pick: [statsd-relay, legacy-sync, debug-shell, beacon] }
+message: |
+  @dhan port scan flagged app01: something is listening on TCP {{PORT}}. what process is that? name please.
+secret_context: |
+  A small unexpected service named {{PROC}} (a python script in /usr/local/bin) is listening on 0.0.0.0:{{PORT}}.
+  Sam wants the process name. Afterwards he'll decide whether to remove it (not part of this task).
+answer: { type: regex, extract: "the process name", value: "^(/usr/local/bin/)?{{PROC}}$" }
+hints:
+  - "There's a tool that lists listening sockets together with the process that owns them (needs root to see other users' processes)."
+  - "`ss -ltnp` = listening, TCP, numeric, with processes. Filter for the port."
+  - "ssh app01 \"sudo ss -ltnp 'sport = :{{PORT}}'\""

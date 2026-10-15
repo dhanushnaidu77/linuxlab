@@ -190,5 +190,5 @@ linuxlab/
 
 ## 14. Open items to verify during implementation
 
-- ~~Minimal capability set for systemd-in-Docker~~ **Resolved (spike 2026-10-15):** on kernel 7.0 / cgroup v2 systemd boots non-privileged with `cgroupns: private`, `cap_add: [SYS_ADMIN, NET_ADMIN, NET_RAW]`, `security_opt: [apparmor=unconfined]`, tmpfs `/run` `/run/lock` `/tmp`, env `container=docker`, and an entrypoint that runs `mount -o remount,rw /sys/fs/cgroup` before `exec /sbin/init` (the private cgroupns limits writes to the container's own subtree). Without apparmor=unconfined the remount is denied.
+- ~~Minimal capability set for systemd-in-Docker~~ **Resolved (spike 2026-10-15):** on kernel 7.0 / cgroup v2 systemd boots non-privileged with `cgroupns: private`, `cap_add: [SYS_ADMIN, NET_ADMIN, NET_RAW, SYS_PTRACE]` (SYS_PTRACE so `ss -p`/`lsof`/`strace` see other users' processes), `security_opt: [apparmor=unconfined]`, tmpfs `/run` `/run/lock` `/tmp`, env `container=docker`, and an entrypoint that runs `mount -o remount,rw /sys/fs/cgroup` before `exec /sbin/init` (the private cgroupns limits writes to the container's own subtree). Without apparmor=unconfined the remount is denied.
 - Whether apt-cacher-ng is worth including in v1 or deferred until package scenarios are written.

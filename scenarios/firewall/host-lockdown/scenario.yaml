@@ -1,0 +1,22 @@
+id: host-lockdown
+title: Lock down web01 with a host firewall
+skills: [firewall, ports-sockets]
+difficulty: 4
+channel: platform
+persona: sam
+targets: [web01]
+vars: {}
+message: |
+  @dhan web01 has no host firewall. implement this with nftables, persistent across reboots:
+  - 80/443 from anywhere
+  - ssh (22) ONLY from the office net 10.10.1.0/24
+  - everything else inbound dropped
+  web01 itself must keep working (DNS, talking to the API on app01). don't lock yourself out 🙃
+secret_context: |
+  web01 has no input filtering. A forgotten debug service listens on :8081 — it must become unreachable. Common mistakes:
+  forgetting "ct state established,related accept" (breaks web01's own DNS lookups and nginx→app01 replies), forgetting loopback,
+  locking out ssh, or only applying rules live without /etc/nftables.conf + enabling nftables.service.
+hints:
+  - "Write an `inet filter` table with an input chain, policy drop, and explicit accepts. Replies to web01's own outbound traffic need accepting too."
+  - "Accept: iif lo, ct state established,related, tcp dport {80,443}, ip saddr 10.10.1.0/24 tcp dport 22, (icmp is nice). Put it in /etc/nftables.conf, `nft -c -f` it, then enable --now nftables."
+  - "table inet filter { chain input { type filter hook input priority 0; policy drop; iif lo accept; ct state established,related accept; ip protocol icmp accept; tcp dport {80,443} accept; ip saddr 10.10.1.0/24 tcp dport 22 accept; } }"

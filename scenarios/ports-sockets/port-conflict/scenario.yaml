@@ -1,0 +1,18 @@
+id: port-conflict
+title: API won't start — address already in use
+skills: [ports-sockets, systemd, processes]
+difficulty: 3
+channel: platform
+persona: marcus
+targets: [app01]
+vars: {}
+message: |
+  @dhan kestrel-api on app01 is down after this morning's deploy and won't come back. restart loop. get it up.
+secret_context: |
+  Tom started a debug "python3 -m http.server 8080" as user tom (via nohup) on app01 to serve some files, grabbing port 8080.
+  kestrel-api then fails with "OSError: [Errno 98] Address already in use". Fix: stop the rogue http.server, start kestrel-api.
+  Marcus suspects something else grabbed the port but wants you to find it.
+hints:
+  - "Read the service's logs: why does it exit right after starting?"
+  - "'Address already in use' → find who owns the port with `sudo ss -ltnp | grep 8080`, then stop that process."
+  - "sudo ss -ltnp 'sport = :8080'; sudo kill <pid>; sudo systemctl restart kestrel-api"

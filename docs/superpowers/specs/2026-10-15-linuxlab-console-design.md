@@ -76,9 +76,10 @@ Location: `scenarios/<skill>/<id>/`.
 
 ### 4.2 Scripts
 
-- `setup.sh` — runs on each target (`docker exec <host> bash -s`) with vars in env. May print `KEY=value` lines to stdout to define `from_setup` vars.
-- `check.sh` — runs **on the host** (in the Node runner) with vars in env and a helper `on <host> '<cmd>'` sourced from `lib/check-helpers.sh`. Exit 0 = pass; nonzero = fail, first stdout line = reason.
-- `cleanup.sh` — optional, same execution model as setup.
+All scripts run **on the host** (in the Node runner) with bash, the scenario vars in env, and helpers sourced from `lib/check-helpers.sh`: `on <host> '<cmd>'` or `on <host> <<'EOF' ... EOF` runs a command/script on a lab host via `docker exec` (scenario vars are forwarded), `as_user <host> <user> '<cmd>'` runs as a lab user.
+- `setup.sh` — plants the scenario state. May print `KEY=value` lines to stdout to define `from_setup` vars.
+- `check.sh` — exit 0 = pass; nonzero = fail, first stdout line = reason.
+- `cleanup.sh` — optional.
 - `solve.sh` — test-only reference solution (runs on host with `on` helper).
 - `solution.md` — shown after pass; may use `{{VAR}}`.
 

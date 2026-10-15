@@ -1,0 +1,18 @@
+id: logrotate-setup
+title: Report log grows forever
+skills: [logs, permissions]
+difficulty: 3
+channel: data
+persona: ana
+targets: [app01]
+vars: {}
+message: |
+  @dhan /var/log/kestrel/report.log on app01 never gets rotated, it's huge now. can you set up rotation:
+  daily, keep 7 days, compressed? and make sure it actually works (force a rotation once)
+secret_context: |
+  No logrotate config exists for report.log. /var/log/kestrel is owned by kestrel:kestrel, so logrotate refuses to rotate there
+  ("parent directory has insecure permissions") unless the config includes "su kestrel kestrel". Ana knows nothing about that.
+hints:
+  - "logrotate reads per-app configs from /etc/logrotate.d/. Test configs with `logrotate -d` (dry run) and `-f` (force)."
+  - "If logrotate complains about 'insecure permissions' of the parent directory, look up the `su` directive."
+  - "printf '/var/log/kestrel/report.log {\\n  daily\\n  rotate 7\\n  compress\\n  missingok\\n  notifempty\\n  su kestrel kestrel\\n}\\n' | sudo tee /etc/logrotate.d/kestrel-report && sudo logrotate -f /etc/logrotate.d/kestrel-report"

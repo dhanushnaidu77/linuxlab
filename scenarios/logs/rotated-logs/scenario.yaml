@@ -1,0 +1,20 @@
+id: rotated-logs
+title: Find the failed export in old logs
+skills: [logs, text-processing]
+difficulty: 2
+channel: data
+persona: ana
+targets: [app01]
+vars:
+  REQ: { from_setup: true }
+message: |
+  @dhan the customer export failed a couple of days ago and I need the request id (req=…) of the failed run for the vendor ticket.
+  should be in the kestrel api logs on app01 somewhere, they rotate though
+secret_context: |
+  /var/log/kestrel/ has api.log, api.log.1, api.log.2.gz, api.log.3.gz. Exactly one line, inside api.log.2.gz, says
+  "ERROR export job failed: vendor rejected payload req={{REQ}}". Plain grep doesn't search inside .gz files.
+answer: { type: regex, extract: "the request id", value: "^(req=)?{{REQ}}$" }
+hints:
+  - "Rotated logs are often compressed. Your normal grep won't look inside them."
+  - "There are z-variants of the usual tools: `zgrep`, `zcat`, `zless`. Search all api.log* files."
+  - "ssh app01 \"zgrep 'export job failed' /var/log/kestrel/api.log*\""

@@ -1,0 +1,18 @@
+id: api-down
+title: The API is down
+skills: [systemd]
+difficulty: 1
+channel: platform
+persona: priya
+targets: [app01]
+vars: {}
+message: |
+  hi @dhan 😬 the internal API seems to be down?? the dashboard just says "service unavailable".
+  client demo at 3pm… can you take a look? it runs on app01 I think
+secret_context: |
+  Someone ran "systemctl disable --now kestrel-api" on app01 during maintenance and forgot to re-enable it.
+  It must be running AND enabled (so it survives a reboot). Priya has no idea what systemd is.
+hints:
+  - "On Ubuntu, services are managed by systemd. Check the state of the API's service unit."
+  - "`systemctl status kestrel-api` tells you if it's running and whether it's enabled at boot."
+  - "sudo systemctl enable --now kestrel-api"

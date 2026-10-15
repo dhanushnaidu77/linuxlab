@@ -1,0 +1,19 @@
+id: create-unit
+title: Turn the metrics exporter into a real service
+skills: [systemd]
+difficulty: 3
+channel: platform
+persona: marcus
+targets: [app01]
+vars: {}
+message: |
+  @dhan someone has been running /opt/kestrel/metrics-exporter.py on app01 in a tmux session 🤦 make it a proper systemd service
+  called `metrics-exporter`: runs as the kestrel user, restarts automatically if it crashes, starts on boot. kill the tmux one.
+secret_context: |
+  metrics-exporter.py listens on :9100 and serves "kestrel_up 1". A stray copy is running as root (started by hand), occupying port 9100,
+  so the new service will fail with "address already in use" until the stray one is killed.
+  Requirements: unit metrics-exporter.service, User=kestrel, Restart=on-failure (or always), enabled, active, serving on 9100.
+hints:
+  - "A service unit needs [Unit], [Service] (ExecStart, User, Restart) and [Install] (WantedBy) sections."
+  - "Write /etc/systemd/system/metrics-exporter.service, daemon-reload, enable --now. If it fails, check what already holds port 9100."
+  - "printf '[Unit]\\nDescription=Metrics exporter\\n[Service]\\nUser=kestrel\\nExecStart=/usr/bin/python3 /opt/kestrel/metrics-exporter.py\\nRestart=on-failure\\n[Install]\\nWantedBy=multi-user.target\\n' | sudo tee /etc/systemd/system/metrics-exporter.service; sudo pkill -f '[m]etrics-exporter'; sudo systemctl daemon-reload; sudo systemctl enable --now metrics-exporter"

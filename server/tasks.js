@@ -203,7 +203,9 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
     }
   }
 
+  // tickets only arrive on their own in live mode; otherwise only the "new ticket" button creates them
   function scheduleNext() {
+    if (!db.getSetting('live', false)) { nextSpawnAt = null; return; }
     const iv = db.getSetting('interval', DEFAULT_INTERVAL);
     nextSpawnAt = now() + (iv.min + rng() * (iv.max - iv.min)) * 60000;
   }
@@ -245,6 +247,7 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
       if (rng() < DM_NUDGE_SHARE) post({ channel: `dm:${scn.persona}`, author: scn.persona, body: `re: ${render(scn.title, task.vars)} — ${nudge}`, meta: { re: task.id } });
       else post({ channel: task.channel, taskId: task.id, author: scn.persona, body: nudge });
     }
+    if (!live) { nextSpawnAt = null; return; }
     if (nextSpawnAt === null) scheduleNext();
     if (clientCount > 0 && now() >= nextSpawnAt) {
       scheduleNext();

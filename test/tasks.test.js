@@ -147,8 +147,9 @@ test('tick nudges after followup minutes, at most twice', async () => {
   assert.equal(inThread + inDm, 2);
 });
 
-test('auto-spawn respects pause, clients, interval and open-task cap', async () => {
+test('live auto-spawn respects pause, clients, interval and open-task cap', async () => {
   const { db, tm, clock } = harness({ scenarios: [fix, { ...fix, id: 'f2' }, { ...fix, id: 'f3' }, { ...fix, id: 'f4' }] });
+  db.setSetting('live', true);
   tm.setClientCount(0);
   clock.t += 60 * MIN; await tm.tick();
   assert.equal(db.openTasks().length, 0);
@@ -239,4 +240,17 @@ test('outside live mode, some spawns become a DM question instead of a ticket', 
   assert.equal(asked, questions);
   db.setSetting('live', true);
   for (let i = 0; i < 50; i++) { const r = await tm.spawn({ force: true }); assert.ok(!r?.question, 'live mode uses its own schedule'); if (r) tm.cancelOpen('x'); }
+});
+
+test('tick only spawns tickets on its own in live mode', async () => {
+  const { db, tm, clock } = harness();
+  tm.setClientCount(1);
+  for (let i = 0; i < 20; i++) { clock.t += 60 * MIN; await tm.tick(); }
+  assert.equal(db.openTasks().length, 0, 'no auto tickets with live mode off');
+  assert.equal(tm.nextSpawnAt(), null);
+  tm.rescheduleSpawn();
+  assert.equal(tm.nextSpawnAt(), null, 'no countdown shown with live mode off');
+  db.setSetting('live', true);
+  for (let i = 0; i < 20; i++) { clock.t += 60 * MIN; await tm.tick(); }
+  assert.ok(db.openTasks().length > 0, 'live mode spawns on its schedule');
 });

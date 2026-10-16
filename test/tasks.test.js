@@ -21,11 +21,11 @@ function harness({ checkResults = [], setupThrows = null, classify = null, scena
   const db = openDb(':memory:');
   const events = [];
   const clock = { t: Date.parse('2026-10-15T12:00:00Z') };
-  const calls = { cleanup: 0 };
+  const calls = { cleanup: 0, ran: [] };
   const runner = {
     async setup(scn, vars) { if (setupThrows) throw setupThrows; return scn.id === 'ask-it' ? { ...vars, PID: '4242' } : vars; },
     async check() { return checkResults.shift() ?? { pass: true, reason: '' }; },
-    async optional(scn, name) { if (name === 'cleanup.sh') calls.cleanup++; return null; },
+    async optional(scn, name) { if (name === 'cleanup.sh') calls.cleanup++; else calls.ran.push(name); return null; },
     exists: () => false,
   };
   const persona = {
@@ -164,4 +164,62 @@ test('cancelOpen closes all open tasks without penalty', async () => {
   tm.cancelOpen('the lab was reset');
   assert.equal(db.openTasks().length, 0);
   assert.deepEqual(db.getMastery(), {});
+});
+
+// ---- live mode: unfolding incident timelines
+const timed = {
+  ...fix, id: 'timed', followup_minutes: 999,
+  timeline: [
+    { at: 5, persona: 'priya', text: 'customers asking about {{WHO}} 😬' },
+    { at: 10, persona: 'diane', channel: 'oncall-alerts', text: 'ETA?' },
+    { at: 12, persona: 'marcus', text: 'worse now', run: 'escalate.sh' },
+  ],
+};
+
+test('timeline is silent when live mode is off', async () => {
+  const { db, tm, clock } = harness({ scenarios: [timed] });
+  const task = await tm.spawn({ force: true });
+  clock.t += 30 * MIN; await tm.tick();
+  assert.equal(db.messages({ taskId: task.id }).length, 1);
+});
+
+test('timeline fires each entry once, in order, at its time, and runs escalation scripts', async () => {
+  const { db, tm, clock, calls } = harness({ scenarios: [timed] });
+  db.setSetting('live', true);
+  const task = await tm.spawn({ force: true });
+  clock.t += 4 * MIN; await tm.tick();
+  assert.equal(db.messages({ taskId: task.id }).length, 1);
+  clock.t += 2 * MIN; await tm.tick(); await tm.tick();
+  assert.deepEqual(db.messages({ taskId: task.id }).map((m) => m.body), ['please fix x', 'customers asking about x 😬']);
+  clock.t += 10 * MIN; await tm.tick();
+  const alerts = db.messages({ channel: 'oncall-alerts' });
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].author, 'diane');
+  assert.equal(alerts[0].taskId, null);
+  assert.equal(db.messages({ taskId: task.id }).at(-1).body, 'worse now');
+  assert.deepEqual(calls.ran, ['escalate.sh']);
+  await tm.tick();
+  assert.equal(calls.ran.length, 1);
+});
+
+test('timeline stops once the task is closed', async () => {
+  const { db, tm, clock } = harness({ scenarios: [timed] });
+  db.setSetting('live', true);
+  const task = await tm.spawn({ force: true });
+  await tm.reply(task.id, 'done');
+  clock.t += 30 * MIN; await tm.tick();
+  assert.equal(db.messages({ taskId: task.id }).filter((m) => m.author === 'priya').length, 0);
+});
+
+test('turning live mode on mid-ticket skips entries that were already due (no burst)', async () => {
+  const { db, tm, clock, calls } = harness({ scenarios: [timed] });
+  const task = await tm.spawn({ force: true });
+  clock.t += 11 * MIN;
+  db.setSetting('live', true); db.setSetting('liveSince', clock.t);
+  await tm.tick();
+  assert.equal(db.messages({ taskId: task.id }).length, 1);
+  assert.equal(db.messages({ channel: 'oncall-alerts' }).length, 0);
+  clock.t += 2 * MIN; await tm.tick();
+  assert.equal(db.messages({ taskId: task.id }).at(-1).body, 'worse now');
+  assert.deepEqual(calls.ran, ['escalate.sh']);
 });

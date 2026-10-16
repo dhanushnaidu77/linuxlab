@@ -44,6 +44,14 @@ for (const scn of selected) {
     const wrongAnswerPasses = scn.answer && before.pass && compareAnswer(scn.answer.type, expected, 'definitely-wrong', { tolerance: scn.answer.tolerance || 0 });
     if (before.pass && (!scn.answer || wrongAnswerPasses)) throw new Error('check PASSED before solving');
 
+    for (const t of scn.timeline || []) if (t.run) {
+      step(`timeline ${t.run}`);
+      const r = await runner.optional(scn, t.run, vars);
+      if (r.code !== 0) throw new Error(`${t.run} exit ${r.code}: ${(r.stderr || r.stdout).trim().slice(0, 300)}`);
+      const mid = await runner.check(scn, vars, { ANSWER: 'definitely-wrong' });
+      if (mid.pass && !scn.answer) throw new Error(`check PASSED after ${t.run} — escalation fixed the fault?`);
+    }
+
     step('solve');
     const solved = await runner.optional(scn, 'solve.sh', vars);
     if (solved.code !== 0) throw new Error(`solve.sh exit ${solved.code}: ${(solved.stderr || solved.stdout).trim().slice(0, 300)}`);

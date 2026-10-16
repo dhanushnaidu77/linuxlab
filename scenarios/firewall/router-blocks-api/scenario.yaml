@@ -19,3 +19,6 @@ hints:
   - "The router's firewall is nftables. Compare the live ruleset with what the API traffic looks like (web01 → app01:8080)."
   - "`sudo nft list ruleset` shows the live rules; /etc/nftables.conf is what loads at boot. Fix the file, then load it."
   - "On rtr01: delete the 'tcp dport 8080 drop' line in /etc/nftables.conf, then: sudo nft -c -f /etc/nftables.conf && sudo systemctl reload nftables"
+timeline:  # live mode only
+  - { at: 8, persona: tom, channel: backend, text: "is /api/ broken through the portal? works fine if I curl app01 directly 🤔" }
+  - { at: 15, persona: leah, text: "any luck? happy to pair on it, I did break it after all 🙈" }

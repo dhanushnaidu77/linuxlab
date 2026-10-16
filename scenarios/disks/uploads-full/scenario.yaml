@@ -17,3 +17,7 @@ hints:
   - "First find out WHICH directory under /srv/uploads is big. Hidden (dot) directories count too."
   - "`df -h /srv/uploads` for the volume, `du -sh /srv/uploads/* /srv/uploads/.[!.]*` or `du -ah | sort -h` to find the culprit."
   - "sudo du -sh /srv/uploads/.[!.]* /srv/uploads/*   then remove the junk temp dir (NOT customer-docs)"
+timeline:  # live mode only
+  - { at: 4, persona: alertbot, run: escalate.sh, text: "[FIRING] DiskAlmostFull — app01:/srv/uploads 99% used (was 96%)" }
+  - { at: 9, persona: tom, channel: backend, text: "are file uploads failing for anyone else? getting 'No space left on device' 🙃" }
+  - { at: 15, persona: marcus, text: "careful in there, customer-docs is the real data" }

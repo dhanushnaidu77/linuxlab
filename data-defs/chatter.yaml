@@ -1,0 +1,177 @@
+# Live mode background chatter. Work-related only. Each entry is one conversation; lines are posted 1-3 minutes apart.
+# Placeholders: {{HOST}} random lab host, {{VER}} a release version, {{NUM}} a small number.
+
+- channel: platform
+  lines:
+    - [marcus, "deploying darkroom-api {{VER}} to app01 in 10. shout if you object"]
+    - [tom, "🚀"]
+    - [marcus, "done. error rate flat, latency flat"]
+
+- channel: platform
+  lines:
+    - [marcus, "reminder: change freeze starts friday 18:00 until monday"]
+    - [priya, "noted! I'll tell the client team 🙏"]
+
+- channel: platform
+  lines:
+    - [sam, "quarterly access review is open. if you have sudo somewhere you don't need it, say so before I find it"]
+
+- channel: platform
+  lines:
+    - [priya, "is the staging environment the same as prod? asking for a client 😅"]
+    - [marcus, "same versions, smaller boxes, fake data"]
+    - [priya, "perfect thanks!"]
+
+- channel: platform
+  lines:
+    - [marcus, "rebooted {{HOST}} for kernel patches, back up in 40s"]
+
+- channel: platform
+  lines:
+    - [sam, "rotating the internal CA intermediate next week. certs issued before tuesday keep working"]
+    - [marcus, "ack. web01 is self-signed anyway 🙃"]
+    - [sam, "yes. that's on my list too."]
+
+- channel: platform
+  lines:
+    - [marcus, "anyone else seeing slow ssh logins to {{HOST}}? like 5s before the prompt"]
+    - [leah, "classic reverse DNS timeout. is UseDNS on?"]
+    - [marcus, "...it was. thanks"]
+
+- channel: platform
+  lines:
+    - [priya, "quick q: what does 'p99 latency' mean? it's in the client report"]
+    - [marcus, "99% of requests were faster than that number. the slow tail"]
+    - [priya, "ohh ok, that makes sense!! 🙏"]
+
+- channel: platform
+  lines:
+    - [marcus, "postmortem for last week's db outage is up in the wiki. tl;dr disk filled, no alert. alert added"]
+
+- channel: platform
+  lines:
+    - [sam, "reminder: secrets go in the vault, not in .env files committed to git. I can see you, {{HOST}} 👀"]
+
+- channel: netops
+  lines:
+    - [leah, "maintenance window tonight 22:00-22:30 on rtr01, firewall ruleset cleanup. expect a blip"]
+    - [marcus, "ack"]
+
+- channel: netops
+  lines:
+    - [leah, "fyi DNS TTLs for darkroom.internal are 300s. if you change a record, give it 5 min before panicking"]
+
+- channel: netops
+  lines:
+    - [leah, "seeing a little packet loss between the dmz and backend in the last hour. probably nothing, watching it"]
+    - [marcus, "nothing on our side. app latency is flat"]
+    - [leah, "cleared up. a noisy neighbour on the hypervisor, I think"]
+
+- channel: netops
+  lines:
+    - [leah, "TIL: `ip -br a` and `ip -br l`. I'm never typing ifconfig again"]
+    - [marcus, "welcome to 2015"]
+
+- channel: netops
+  lines:
+    - [leah, "who added a /32 static route on {{HOST}}? not judging, just documenting 📝"]
+    - [tom, "...that might have been me testing something 😬 it can go"]
+
+- channel: netops
+  lines:
+    - [leah, "reminder: the office net is 10.10.1.0/24, dmz is .2, backend is .3. nobody gets to invent a .4 without a ticket"]
+
+- channel: it-helpdesk
+  lines:
+    - [raj, "PSA: the VPN client update rolls out tomorrow morning. if yours breaks, restart first, then ping me 🙏"]
+
+- channel: it-helpdesk
+  lines:
+    - [raj, "INC-{{NUM}}88 closed: printer on floor 2 was out of paper. we did it, team 🎉"]
+
+- channel: it-helpdesk
+  lines:
+    - [raj, "new starters on monday: 2 devs, 1 data analyst. accounts incoming next week, heads up @dhan"]
+
+- channel: it-helpdesk
+  lines:
+    - [raj, "reminder that password reset requests need to come through a ticket, not DMs. thanks a ton!"]
+    - [sam, "+1. DMs are not an audit trail."]
+
+- channel: it-helpdesk
+  lines:
+    - [raj, "does anyone know who owns the shared drive under /srv/shared? finance and ops both say it's theirs 😅"]
+
+- channel: backend
+  lines:
+    - [tom, "PR for the new orders endpoint is up, reviews welcome 🙏"]
+    - [tom, "also I may have broken the staging build. investigating lol"]
+    - [tom, "fixed. it was a missing comma. as always"]
+
+- channel: backend
+  lines:
+    - [tom, "is it just me or is the CI runner super slow today"]
+    - [marcus, "disk on the runner was at 94%. cleaned docker images, try again"]
+    - [tom, "ty 🙌"]
+
+- channel: backend
+  lines:
+    - [tom, "ngl the darkroom-api logs are kinda useless at INFO level. can we add request ids everywhere?"]
+    - [marcus, "yes please. structured json while you're at it"]
+
+- channel: backend
+  lines:
+    - [tom, "darkroom-api {{VER}} changelog: faster health check, fewer db connections, one less typo"]
+
+- channel: backend
+  lines:
+    - [tom, "quick sanity check: we connect to postgres by hostname right, not IP?"]
+    - [marcus, "by hostname. db01.darkroom.internal. never hardcode IPs"]
+
+- channel: data
+  lines:
+    - [ana, "nightly export finished in 41 min, down from 63. the new index helped 📉"]
+
+- channel: data
+  lines:
+    - [ana, "heads up: the orders table crossed {{NUM}} million rows. reports might get slower"]
+    - [marcus, "let me know before it's a problem, not after 🙂"]
+
+- channel: data
+  lines:
+    - [ana, "finance asked for the Q3 numbers 'by end of day' at 4:45pm. as is tradition"]
+    - [priya, "😬 sorry, that was partly me"]
+
+- channel: data
+  lines:
+    - [ana, "if anyone writes CSVs by hand: quote fields that contain commas. please. I'm begging"]
+
+- channel: data
+  lines:
+    - [ana, "the report job ran twice last night, so we have duplicate rows. looking into the cron entry"]
+    - [ana, "nvm, someone ran it manually at 02:31 too. all good"]
+
+- channel: oncall-alerts
+  lines:
+    - [alertbot, "[FIRING] HighLatency — darkroom-api p99 > 800ms on app01"]
+    - [alertbot, "[RESOLVED] HighLatency — darkroom-api p99 back to normal"]
+
+- channel: oncall-alerts
+  lines:
+    - [alertbot, "[FIRING] DiskUsageWarning — {{HOST}}:/var 81% used"]
+    - [marcus, "looking. old journal files"]
+    - [alertbot, "[RESOLVED] DiskUsageWarning — {{HOST}}:/var"]
+
+- channel: oncall-alerts
+  lines:
+    - [alertbot, "[FIRING] CertExpiringSoon — web01:443 expires in 29 days"]
+    - [marcus, "ticket created, not urgent yet"]
+
+- channel: oncall-alerts
+  lines:
+    - [alertbot, "[FIRING] NTPDrift — {{HOST}} clock offset 1.2s"]
+    - [alertbot, "[RESOLVED] NTPDrift — {{HOST}}"]
+
+- channel: oncall-alerts
+  lines:
+    - [diane, "Thanks all for the quick response on last week's incident. Customers noticed the fast fix."]

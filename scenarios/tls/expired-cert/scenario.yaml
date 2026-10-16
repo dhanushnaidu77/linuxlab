@@ -17,3 +17,6 @@ hints:
   - "Check the dates on the certificate nginx is serving. `openssl s_client` + `openssl x509 -noout -dates`."
   - "Find the cert path in the nginx site config, create a new self-signed cert with `openssl req -x509 ... -days 365`, then reload nginx."
   - "sudo openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj /CN=web01.darkroom.internal -keyout /etc/nginx/ssl/darkroom.key -out /etc/nginx/ssl/darkroom.crt && sudo nginx -t && sudo systemctl reload nginx"
+timeline:  # live mode only
+  - { at: 8, persona: priya, text: "demo is in 1.5 hours now 😰 any luck?" }
+  - { at: 16, persona: sam, text: "while you're in there: please add a SAN, CN-only certs are deprecated" }

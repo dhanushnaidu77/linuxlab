@@ -17,3 +17,7 @@ hints:
   - "Work from the outside in: what does curl to the portal say? Then check each service along the path (web01 nginx → app01 api)."
   - "On web01: `systemctl status nginx`, `sudo nginx -t` shows the config error with a line number. Then check the API on app01."
   - "ssh web01: fix the missing ';' that `sudo nginx -t` reports, sudo systemctl start nginx. ssh app01: sudo systemctl start darkroom-api"
+timeline:  # live mode only
+  - { at: 4, persona: priya, channel: platform, text: "is the portal down?? a client just emailed me 😱" }
+  - { at: 10, persona: diane, text: "Any update? I need something to tell customers." }
+  - { at: 18, persona: marcus, text: "want a second pair of eyes? I can take app01 if you take web01" }

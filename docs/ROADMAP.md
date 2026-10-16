@@ -2,10 +2,10 @@
 
 Agreed 2026-10-16. Ordered by impact. Each item gets its own short design before building.
 
-1. **AI coworker replies** — add `ANTHROPIC_API_KEY` to `.env` (no code). *Pending: user adding the key.*
-2. **Background chatter** — coworkers talk to each other in channels (deploy announcements, "anyone else seeing slowness?",
+1. ~~**AI coworker replies**~~ — done (key added 2026-10-16).
+2. ~~**Background chatter**~~ — done (Live mode) — coworkers talk to each other in channels (deploy announcements, "anyone else seeing slowness?",
    status chatter), occasionally containing clues for open tickets. Work-related only — **no lunch plans / social filler**.
-3. **Unfolding incidents** — alerts with a timeline: a coworker joins the thread, the CTO asks for an ETA after N minutes, and
+3. ~~**Unfolding incidents**~~ — done (Live mode, `timeline:` in scenario.yaml) — alerts with a timeline: a coworker joins the thread, the CTO asks for an ETA after N minutes, and
    the fault can worsen if left alone (e.g. a disk keeps filling). Shares the scripted-timeline plumbing with (2).
 4. **Real monitoring** — a status/metrics page in the console (CPU, disk, API latency, error rate per host) and alerts that fire
    from actual thresholds instead of only from scenarios.
@@ -17,3 +17,5 @@ Agreed 2026-10-16. Ordered by impact. Each item gets its own short design before
 ## Done
 - Easy tickets mixed in at any level (~20%, `EASY_SHARE` in `server/scheduler.js`).
 - Reset everything (Settings → Start over).
+- Live mode toggle (header pill / Settings): chatter from `data-defs/chatter.yaml` every 20–40 min, and scenario
+  `timeline:` entries (`at` minutes, `persona`, `text`, optional `channel`, optional `run` escalation script).

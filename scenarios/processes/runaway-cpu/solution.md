@@ -3,7 +3,7 @@
 ssh app01
 uptime                                  # load average confirms it
 ps aux --sort=-%cpu | head -5           # or: top, then press P
-sudo kill <PID>                         # SIGTERM: polite, lets it clean up
+sudo kill <PID>                         # SIGTERM: polite, lets it clean up (check again: there may be more than one!)
 sudo kill -9 <PID>                      # SIGKILL: only if TERM is ignored
 ```
 

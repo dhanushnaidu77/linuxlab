@@ -16,3 +16,6 @@ hints:
   - "Read the service's logs: why does it exit right after starting?"
   - "'Address already in use' → find who owns the port with `sudo ss -ltnp | grep 8080`, then stop that process."
   - "sudo ss -ltnp 'sport = :8080'; sudo kill <pid>; sudo systemctl restart darkroom-api"
+timeline:  # live mode only
+  - { at: 7, persona: priya, channel: platform, text: "is the API down again? the dashboard says service unavailable 😬" }
+  - { at: 14, persona: marcus, text: "status?" }

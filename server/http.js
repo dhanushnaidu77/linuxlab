@@ -50,7 +50,7 @@ export function createApp({ auth, db, defs, scenarios, tm, persona, lab, log = (
       openTasks: db.openTasks().map(tm.summary),
       recentTasks: db.recentTasks(15).filter((t) => !['open', 'checking', 'pending_setup'].includes(t.state)).map(tm.summary),
       lastMessageIds: db.lastMessageIds(),
-      settings: { paused: db.getSetting('paused', false), interval: db.getSetting('interval', { min: 5, max: 20 }), tailscale: tailscale() },
+      settings: { paused: db.getSetting('paused', false), interval: db.getSetting('interval', { min: 5, max: 20 }), tailscale: tailscale(), live: db.getSetting('live', false) },
       nextSpawnAt: tm.nextSpawnAt(),
       lab: labState,
       personaOnline: persona.online,
@@ -81,6 +81,11 @@ export function createApp({ auth, db, defs, scenarios, tm, persona, lab, log = (
     const b = req.body || {};
     if (typeof b.paused === 'boolean') db.setSetting('paused', b.paused);
     if (typeof b.tailscale === 'boolean') db.setSetting('tailscale', b.tailscale);
+    if (typeof b.live === 'boolean' && b.live !== db.getSetting('live', false)) {
+      db.setSetting('live', b.live);
+      if (b.live) db.setSetting('liveSince', Date.now());
+      broadcast({ type: 'progress' });
+    }
     if (b.interval && Number.isFinite(b.interval.min) && Number.isFinite(b.interval.max) && b.interval.min >= 1 && b.interval.max >= b.interval.min && b.interval.max <= 240) {
       db.setSetting('interval', { min: b.interval.min, max: b.interval.max });
       tm.rescheduleSpawn();
@@ -131,5 +136,5 @@ export function createApp({ auth, db, defs, scenarios, tm, persona, lab, log = (
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   }
 
-  return { app, handleUpgrade, broadcast, setLabState, state };
+  return { app, handleUpgrade, broadcast, setLabState, state, clientCount: () => events.clients.size };
 }

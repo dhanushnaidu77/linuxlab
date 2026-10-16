@@ -197,7 +197,33 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
     nextSpawnAt = now() + (iv.min + rng() * (iv.max - iv.min)) * 60000;
   }
 
+  // live mode: scripted follow-ups that make an incident unfold while the ticket stays open
+  async function runTimeline(task, scn) {
+    const liveSince = db.getSetting('liveSince', 0);
+    const done = new Set(task.timelineDone);
+    for (const [i, entry] of (scn.timeline || []).entries()) {
+      const due = task.createdAt + entry.at * 60000;
+      if (done.has(i) || now() < due) continue;
+      done.add(i);
+      db.updateTask(task.id, { timelineDone: [...done] });
+      if (due < liveSince) continue; // was due while live mode was off: skip rather than burst
+      if (entry.run) {
+        try { await runner.optional(scn, entry.run, task.vars); } catch (e) { log(`timeline ${scn.id}/${entry.run}: ${e.message}`); }
+      }
+      if (entry.text) {
+        const body = render(entry.text, task.vars);
+        if (entry.channel) post({ channel: entry.channel, author: entry.persona, body });
+        else post({ channel: task.channel, taskId: task.id, author: entry.persona, body });
+      }
+    }
+  }
+
   async function tick() {
+    const live = db.getSetting('live', false);
+    for (const task of db.openTasks()) {
+      const tscn = scenarios.get(task.scenarioId);
+      if (live && tscn?.timeline && task.state === 'open' && !busy.has(task.id)) await runTimeline(task, tscn);
+    }
     for (const task of db.openTasks()) {
       const scn = scenarios.get(task.scenarioId);
       if (!scn || task.state !== 'open' || task.nudges >= MAX_NUDGES || busy.has(task.id)) continue;

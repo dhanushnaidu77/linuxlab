@@ -27,6 +27,7 @@
       <div class="status">
         <span id="lab-status" class="pill" title="Lab containers">lab …</span>
         <span id="persona-status" class="pill" title="Persona replies"></span>
+        <span id="live-status" class="pill" title="Live mode: background chatter + unfolding incidents (click to toggle)"></span>
         <span id="spawn-status" class="pill muted"></span>
       </div>
       <div class="progress">
@@ -116,6 +117,7 @@
     <form method="dialog" class="modal-body">
       <h2>Settings</h2>
       <label class="row"><input type="checkbox" id="set-paused"> Pause (no new tickets or follow-ups)</label>
+      <label class="row"><input type="checkbox" id="set-live"> Live mode — background chatter + incidents that unfold while open (slow pace; turn on for longer sessions)</label>
       <div class="row">New ticket every
         <input type="number" id="set-min" min="1" max="240" class="num"> –
         <input type="number" id="set-max" min="1" max="240" class="num"> minutes (random)</div>

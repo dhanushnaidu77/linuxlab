@@ -17,3 +17,7 @@ hints:
   - "Test connectivity from app01 to db01:5432 (nc -zv). Then look at db01: is postgres listening, and on which address? Is anything filtering?"
   - "On db01: `sudo ss -ltnp | grep 5432` shows the bind address; `sudo nft list ruleset` shows host firewall rules."
   - "On db01: set listen_addresses = '*' in /etc/postgresql/16/main/postgresql.conf, sudo systemctl restart postgresql, and remove the 5432 drop rule (sudo nft flush ruleset or delete by handle)."
+timeline:  # live mode only
+  - { at: 6, persona: tom, channel: backend, text: "api returns 503 on everything that touches the db, anyone on it?" }
+  - { at: 12, persona: alertbot, text: "[FIRING] DarkroomApiDbDown — firing for 12m" }
+  - { at: 18, persona: diane, channel: oncall-alerts, text: "What's the status on the database alert? Customers are noticing." }

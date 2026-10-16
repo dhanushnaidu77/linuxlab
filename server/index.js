@@ -8,6 +8,7 @@ import { createRunner } from './runner.js';
 import { createPersonaEngine } from './persona.js';
 import { createTaskManager } from './tasks.js';
 import { createApp } from './http.js';
+import { loadChatter, createChatter } from './chatter.js';
 import * as lab from './lab.js';
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
@@ -23,6 +24,9 @@ const { scenarios, warnings } = loadScenarios(cfg.scenariosDir, defs);
 for (const w of warnings) log('scenario skipped:', w);
 log(`loaded ${scenarios.size} scenarios`);
 
+const { convos, warnings: chatterWarnings } = loadChatter(cfg.defsDir, defs);
+for (const w of chatterWarnings) log('chatter skipped:', w);
+
 const db = openDb(cfg.dbPath);
 const auth = createAuth({ passwordHash: cfg.passwordHash, secret: cfg.sessionSecret });
 const persona = createPersonaEngine({ apiKey: cfg.anthropicKey, model: cfg.model, log });
@@ -32,6 +36,7 @@ let broadcast = () => {};
 const tm = createTaskManager({ db, defs, scenarios, runner: createRunner({ log }), persona, broadcast: (e) => broadcast(e), log });
 const web = createApp({ auth, db, defs, scenarios, tm, persona, lab: { reset: lab.labReset, start: lab.labStart }, log });
 broadcast = web.broadcast;
+const chatter = createChatter({ db, convos, broadcast: (e) => broadcast(e), clientCount: () => web.clientCount() });
 
 // tasks left mid-check by a previous crash go back to open
 for (const t of db.openTasks()) if (t.state !== 'open') db.updateTask(t.id, { state: 'open' });
@@ -44,6 +49,7 @@ async function pollLab() {
 await pollLab();
 setInterval(() => pollLab().catch((e) => log('lab poll', e.message)), 15_000);
 setInterval(() => tm.tick().catch((e) => log('tick', e.stack)), 15_000);
+setInterval(() => chatter.tick().catch((e) => log('chatter', e.stack)), 15_000);
 
 const server = http.createServer(web.app);
 server.on('upgrade', web.handleUpgrade);

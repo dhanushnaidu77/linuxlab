@@ -17,3 +17,7 @@ hints:
   - "When a service keeps restarting, its own logs usually say why. systemd keeps them in the journal."
   - "`journalctl -u darkroom-api -n 30` (or `-f` to follow). Then look at the file the error mentions."
   - "Edit /etc/darkroom/api.conf: in the [server] section set `port = 8080` (leave the [database] port alone!), then: sudo systemctl restart darkroom-api"
+timeline:  # live mode only
+  - { at: 5, persona: alertbot, text: "[FIRING] DarkroomApiDown — still firing, restart count now 40+" }
+  - { at: 10, persona: marcus, text: "you on this? the journal usually says exactly why it dies" }
+  - { at: 15, persona: diane, channel: oncall-alerts, text: "What's the status on the API alert?" }

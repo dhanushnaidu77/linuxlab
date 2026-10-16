@@ -17,3 +17,6 @@ hints:
   - "If app01 can't send replies off its subnet, connect from a machine that's ON its subnet (10.10.3.0/24)."
   - "`ssh -J db01 app01` jumps through db01. Then check `ip route` on app01 — what's missing?"
   - "ssh -J db01 app01 'sudo ip route add default via 10.10.3.1'"
+timeline:  # live mode only
+  - { at: 10, persona: alertbot, channel: oncall-alerts, text: "[FIRING] TargetDown — monitoring can't scrape app01:9100 from the office net" }
+  - { at: 16, persona: leah, text: "if you can't get in directly: anything on 10.10.3.0/24 can still reach it" }

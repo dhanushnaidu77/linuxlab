@@ -34,9 +34,19 @@ function validate(s, dir, defs) {
   if (!Array.isArray(s.hints) || s.hints.length !== 3) errs.push('hints must have exactly 3 entries');
   if (s.answer && !ANSWER_TYPES.includes(s.answer.type)) errs.push(`answer.type must be one of ${ANSWER_TYPES}`);
   if (s.answer && !s.answer.value) errs.push('answer.value required');
+  if (s.timeline !== undefined) {
+    if (!Array.isArray(s.timeline)) errs.push('timeline must be a list');
+    else s.timeline.forEach((t, i) => {
+      if (!(typeof t?.at === 'number' && t.at > 0)) errs.push(`timeline[${i}].at must be minutes > 0`);
+      if (!t?.text && !t?.run) errs.push(`timeline[${i}] needs text and/or run`);
+      if (t?.text && !defs.personas.has(t.persona)) errs.push(`timeline[${i}] unknown persona ${t?.persona}`);
+      if (t?.channel && !defs.channels.has(t.channel)) errs.push(`timeline[${i}] unknown channel ${t.channel}`);
+      if (t?.run && !fs.existsSync(path.join(dir, t.run))) errs.push(`timeline[${i}] missing script ${t.run}`);
+    });
+  }
   for (const f of ['setup.sh', 'check.sh']) if (!fs.existsSync(path.join(dir, f))) errs.push(`missing ${f}`);
   const declared = new Set(Object.keys(s.vars || {}));
-  const used = [s.message, s.secret_context, s.answer?.value || ''].join(' ').matchAll(/\{\{\s*(\w+)\s*\}\}/g);
+  const used = [s.message, s.secret_context, s.answer?.value || '', ...(Array.isArray(s.timeline) ? s.timeline.map((t) => t?.text || '') : [])].join(' ').matchAll(/\{\{\s*(\w+)\s*\}\}/g);
   for (const [, v] of used) if (!declared.has(v)) errs.push(`undeclared var ${v}`);
   return errs;
 }

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY, scenario_id TEXT NOT NULL, vars_json TEXT NOT NULL, state TEXT NOT NULL,
   channel TEXT NOT NULL, persona TEXT NOT NULL, created_at INTEGER NOT NULL, closed_at INTEGER,
   last_activity INTEGER NOT NULL, hints_used INTEGER NOT NULL DEFAULT 0, nudges INTEGER NOT NULL DEFAULT 0,
-  xp_awarded INTEGER NOT NULL DEFAULT 0);
+  xp_awarded INTEGER NOT NULL DEFAULT 0, timeline_done TEXT NOT NULL DEFAULT '[]');
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY, task_id INTEGER, channel TEXT NOT NULL, author TEXT NOT NULL,
   kind TEXT NOT NULL DEFAULT 'msg', body TEXT NOT NULL, created_at INTEGER NOT NULL);
@@ -19,12 +19,12 @@ CREATE TABLE IF NOT EXISTS pass_days (day TEXT PRIMARY KEY);
 `;
 
 const OPEN_STATES = ['pending_setup', 'open', 'checking'];
-const COLS = { state: 'state', closedAt: 'closed_at', lastActivity: 'last_activity', hintsUsed: 'hints_used', nudges: 'nudges', xpAwarded: 'xp_awarded', vars: 'vars_json' };
+const COLS = { state: 'state', closedAt: 'closed_at', lastActivity: 'last_activity', hintsUsed: 'hints_used', nudges: 'nudges', xpAwarded: 'xp_awarded', vars: 'vars_json', timelineDone: 'timeline_done' };
 
 const rowToTask = (r) => r && ({
   id: r.id, scenarioId: r.scenario_id, vars: JSON.parse(r.vars_json), state: r.state, channel: r.channel,
   persona: r.persona, createdAt: r.created_at, closedAt: r.closed_at, lastActivity: r.last_activity,
-  hintsUsed: r.hints_used, nudges: r.nudges, xpAwarded: r.xp_awarded,
+  hintsUsed: r.hints_used, nudges: r.nudges, xpAwarded: r.xp_awarded, timelineDone: JSON.parse(r.timeline_done || '[]'),
 });
 const rowToMsg = (r) => ({ id: r.id, taskId: r.task_id, channel: r.channel, author: r.author, kind: r.kind, body: r.body, at: r.created_at });
 
@@ -35,6 +35,9 @@ export function openDb(file) {
   const db = new Database(file);
   db.pragma('journal_mode = WAL');
   db.exec(SCHEMA);
+  // migrations for databases created by older versions
+  if (!db.prepare('PRAGMA table_info(tasks)').all().some((c) => c.name === 'timeline_done'))
+    db.exec("ALTER TABLE tasks ADD COLUMN timeline_done TEXT NOT NULL DEFAULT '[]'");
 
   return {
     createTask({ scenarioId, vars, channel, persona, now = Date.now() }) {
@@ -46,7 +49,7 @@ export function openDb(file) {
       for (const [k, v] of Object.entries(fields)) {
         if (!COLS[k]) throw new Error(`unknown task field ${k}`);
         sets.push(`${COLS[k]} = ?`);
-        vals.push(k === 'vars' ? JSON.stringify(v) : v);
+        vals.push(k === 'vars' || k === 'timelineDone' ? JSON.stringify(v) : v);
       }
       db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...vals, id);
     },

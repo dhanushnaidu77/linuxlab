@@ -55,6 +55,9 @@ WantedBy=default.target
   - 💡 **Hint** gives three escalating hints, each costing 25% of the ticket's XP. **Skip** shows the solution.
 - **Terminal tab**: as many sessions as you like, each starting on `jump01`. Double-click a session to rename it.
 - **Ctrl+\\**: split view, with chat and terminal side by side.
+- **Live mode** (header pill `○ live off`, or Settings): turn it on for longer sessions. Coworkers chat in channels every 20–40 min
+  (pre-written, work-only, free) and some incidents unfold while you work on them: follow-ups, the CTO asking for an ETA,
+  and a few faults that get worse. Add your own with a `timeline:` block in `scenario.yaml` and lines in `data-defs/chatter.yaml`.
 - **⚙ Settings**: pause, ticket frequency (a new ticket every 5–20 min by default, only while the page is open), Tailscale access, and resetting the lab or a single host.
 - **Progress**: 18 skills in 3 tiers. Passing tickets raises mastery. Higher tiers unlock when their prerequisites reach 30. Mastery slowly drops after a week without practice. The scheduler favours your weakest unlocked skills.
 

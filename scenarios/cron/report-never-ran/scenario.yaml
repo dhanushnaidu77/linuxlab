@@ -17,3 +17,6 @@ hints:
   - "Scheduled jobs on Linux are usually cron. Find the job definition and check cron's own logs."
   - "`journalctl -u cron` shows why cron skipped a file. Files in /etc/cron.d must not be group/world-writable."
   - "sudo chmod 644 /etc/cron.d/nightly-report && sudo -u darkroom /opt/darkroom/nightly-report.sh"
+timeline:  # live mode only
+  - { at: 10, persona: ana, channel: data, text: "finance is pinging me about the nightly report too. someone on it?" }
+  - { at: 20, persona: priya, text: "any ETA I can give finance? 🙏" }

@@ -16,3 +16,7 @@ hints:
   - "On Ubuntu, services are managed by systemd. Check the state of the API's service unit."
   - "`systemctl status darkroom-api` tells you if it's running and whether it's enabled at boot."
   - "sudo systemctl enable --now darkroom-api"
+timeline:  # live mode only
+  - { at: 6, persona: priya, text: "the client team is asking if it's back yet 😬 any news?" }
+  - { at: 12, persona: marcus, text: "need a hand with this one?" }
+  - { at: 18, persona: diane, channel: oncall-alerts, text: "Is someone handling the internal API outage? I need an ETA." }

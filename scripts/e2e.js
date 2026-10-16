@@ -38,6 +38,13 @@ try {
   await page.waitForSelector('#channel-list li');
   await shot(page, '1-empty');
 
+  step('live mode toggle');
+  await page.waitForFunction(() => document.querySelector('#live-status')?.textContent.includes('live off'));
+  await page.click('#live-status');
+  await page.waitForFunction(() => document.querySelector('#live-status')?.textContent === '● live');
+  await page.click('#live-status');
+  await page.waitForFunction(() => document.querySelector('#live-status')?.textContent.includes('live off'));
+
   step('new ticket');
   await page.click('#btn-new');
   await page.waitForSelector('#task-list li .t-title', { timeout: 30000 });

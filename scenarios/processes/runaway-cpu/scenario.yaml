@@ -17,3 +17,6 @@ hints:
   - "Which tool shows live per-process CPU usage?"
   - "Run `top` (press P to sort by CPU) or `ps aux --sort=-%cpu | head`. Note the PID, then send it a signal."
   - "ps aux --sort=-%cpu | head -5   then   sudo kill <PID>   (kill -9 only if it ignores SIGTERM)"
+timeline:  # live mode only
+  - { at: 6, persona: marcus, run: escalate.sh, text: "load just jumped again. looks like a second one started" }
+  - { at: 14, persona: priya, channel: platform, text: "everything feels super slow today, is that just me?" }

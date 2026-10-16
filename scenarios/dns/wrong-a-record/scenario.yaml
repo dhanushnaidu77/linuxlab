@@ -18,3 +18,6 @@ hints:
   - "If it works by IP but not by name, compare what the name resolves to with the real IP."
   - "`dig db01.darkroom.internal` from app01. If it's wrong, the record lives in the zone file on ns01."
   - "ssh ns01; fix the db01 line in /etc/bind/db.darkroom.internal to 10.10.3.20, bump the serial, sudo rndc reload"
+timeline:  # live mode only
+  - { at: 8, persona: alertbot, channel: oncall-alerts, text: "[FIRING] DarkroomApiDbDown — app01 health reports db: down" }
+  - { at: 14, persona: tom, text: "fwiw I just checked, db01 itself looks totally healthy" }

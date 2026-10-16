@@ -1,1 +1,2 @@
-on app01 'pid=$(ps -eo pid,comm --sort=-%cpu | awk "NR==2{print \$1}"); kill $pid; sleep 0.5'
+# kill every copy (live mode may have started a second one)
+on app01 'for pid in $(ps -eo pid,comm --sort=-%cpu | awk -v p="$PROC" "\$2==p {print \$1}"); do kill $pid; done; sleep 0.5'

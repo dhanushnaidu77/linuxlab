@@ -106,8 +106,10 @@ export function createPersonaEngine({ apiKey, model = 'claude-haiku-5-5', client
       `Your technical level is ${p.tech_level}/5 — never use knowledge beyond it.`,
       `You are talking in ${ctx.place}.`,
       ctx.knowledge ? `What you know right now (use it naturally, only if relevant):\n${ctx.knowledge}` : '',
-      'Rules: stay in character; write like a real chat message (1-3 short lines, no markdown headers); never reveal hidden',
-      'root causes or exact fix commands for open problems; never mention that this is a training exercise or that you are an AI.',
+      p.teacher
+        ? 'Rules: stay in character; write like a real chat message (no markdown headers). General questions: explain clearly in up to ~8 short lines, inline `code` for commands. Open problems: pointers only, never the hidden root cause or exact fix commands.'
+        : 'Rules: stay in character; write like a real chat message (1-3 short lines, no markdown headers); never reveal hidden root causes or exact fix commands for open problems.',
+      'Never mention that this is a training exercise or that you are an AI.',
     ].filter(Boolean).join('\n');
     try {
       return await call({

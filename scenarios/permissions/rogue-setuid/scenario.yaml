@@ -1,0 +1,19 @@
+id: rogue-setuid
+title: Find the rogue setuid binary
+skills: [permissions, packages]
+difficulty: 3
+channel: platform
+persona: sam
+targets: [jump01]
+vars:
+  NAME: { pick: [backup-helper, net-diag, sysmon-util, log-reader] }
+message: |
+  @dhan IDS flagged a setuid-root binary on jump01 that isn't from any package. find it. path only, don't touch it yet, I want to image it.
+secret_context: |
+  /usr/local/sbin/{{NAME}} is a copy of bash with the setuid bit set, owned by root — a backdoor. All other setuid files belong
+  to packages (passwd, sudo, su, mount...). Find setuid files with find -perm -4000 and check which aren't owned by a package (dpkg -S).
+answer: { type: exact, extract: "the path of the binary", value: "/usr/local/sbin/{{NAME}}" }
+hints:
+  - "find can search for files by permission bits. Then figure out which ones a package installed."
+  - "`sudo find / -xdev -perm -4000 -type f` lists setuid files; `dpkg -S <path>` errors for files no package owns. /usr/local is never package-managed."
+  - "sudo find / -xdev -perm -4000 -type f 2>/dev/null | while read f; do dpkg -S \"$f\" >/dev/null 2>&1 || echo \"$f\"; done"

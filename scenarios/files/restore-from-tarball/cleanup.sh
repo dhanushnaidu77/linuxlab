@@ -1,0 +1,1 @@
+on web01 'rm -f /var/www/darkroom/about.html /var/www/darkroom/site.css; printf "<!doctype html><title>Darkroom Labs</title><h1>Darkroom Labs internal portal</h1><p>status: ok</p>\n" > /var/www/darkroom/index.html'

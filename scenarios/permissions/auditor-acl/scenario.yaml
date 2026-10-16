@@ -1,0 +1,18 @@
+id: auditor-acl
+title: Read-only log access for the auditor
+skills: [permissions, users]
+difficulty: 3
+channel: platform
+persona: sam
+targets: [app01]
+vars: {}
+message: |
+  @dhan external auditor account `auditor` on app01 needs READ access to everything in /var/log/darkroom, including log files
+  created in the future. no write. don't change the owner/group of the logs, the service depends on them.
+secret_context: |
+  /var/log/darkroom is darkroom:darkroom 0750, files 0640. Changing group/mode would be wrong. Correct: ACLs —
+  setfacl -R -m u:auditor:rX on the dir (+ files), and a default ACL (d:u:auditor:rX) so new files inherit it.
+hints:
+  - "Classic owner/group/other bits can't express 'one extra user, read-only' without changing group. There's a finer-grained mechanism."
+  - "POSIX ACLs: `setfacl -m u:auditor:rX` for existing files, and `-d` (default ACL) on the directory for future files. `getfacl` to verify."
+  - "sudo setfacl -R -m u:auditor:rX /var/log/darkroom && sudo setfacl -d -m u:auditor:rX /var/log/darkroom"

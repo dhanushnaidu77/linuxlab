@@ -1,0 +1,18 @@
+id: recently-changed-config
+title: Which config changed in the last hour?
+skills: [files]
+difficulty: 2
+channel: platform
+persona: marcus
+targets: [web01]
+vars:
+  CHANGED: { from_setup: true }
+message: |
+  @dhan something under /etc on web01 was edited in the last hour and nobody owns up. find the file. full path.
+secret_context: |
+  One file, {{CHANGED}}, was modified ~20 minutes ago; everything else under /etc is older. Marcus wants the path.
+answer: { type: exact, extract: "the full path of the changed file", value: "{{CHANGED}}" }
+hints:
+  - "find can filter by modification time."
+  - "`find /etc -mmin -60` lists files modified in the last 60 minutes (needs sudo for some dirs). -type f to skip dirs."
+  - "ssh web01 'sudo find /etc -type f -mmin -60'"

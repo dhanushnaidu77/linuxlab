@@ -1,0 +1,17 @@
+id: sticky-drop-dir
+title: People keep deleting each other's files
+skills: [permissions]
+difficulty: 2
+channel: it-helpdesk
+persona: raj
+targets: [app01]
+vars: {}
+message: |
+  Hi @dhan, INC-5012: /srv/drop on app01 is the shared drop folder for the team. Everyone needs to be able to add files,
+  but people keep (accidentally) deleting each other's files. Can you make it so you can only delete your own? 🙏
+secret_context: |
+  /srv/drop is mode 0777. Users omar and grace both use it. Fix: sticky bit (chmod +t → 1777), like /tmp. Raj doesn't know the term.
+hints:
+  - "/tmp has the exact behaviour Raj wants. Compare its permissions with /srv/drop."
+  - "The sticky bit on a directory means only a file's owner (or root) can delete/rename it. `ls -ld /tmp` shows a 't'."
+  - "sudo chmod +t /srv/drop   (→ drwxrwxrwt)"

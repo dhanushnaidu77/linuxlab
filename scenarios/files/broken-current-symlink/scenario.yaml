@@ -1,0 +1,19 @@
+id: broken-current-symlink
+title: Release symlink points at nothing
+skills: [files, systemd]
+difficulty: 2
+channel: backend
+persona: tom
+targets: [app01]
+vars:
+  GOOD: { pick: ["2026.10.12", "2026.10.13", "2026.10.14"] }
+message: |
+  @dhan so the reports-worker on app01 won't start after I cleaned up old releases in /opt/darkroom/releases 😅
+  it runs from /opt/darkroom/current. pls point it back at the newest release and get it running?
+secret_context: |
+  /opt/darkroom/current is a symlink to /opt/darkroom/releases/2026.10.01, which Tom deleted. The newest remaining release is
+  {{GOOD}}. reports-worker.service runs /opt/darkroom/current/worker.sh. Fix: re-point the symlink (ln -sfn) and restart the service.
+hints:
+  - "Look at what /opt/darkroom/current actually points to (`ls -l`), and what's still in releases/."
+  - "Re-point the link with `ln -sfn <target> <link>` (the -n matters for links to directories), then restart the service."
+  - "sudo ln -sfn /opt/darkroom/releases/{{GOOD}} /opt/darkroom/current && sudo systemctl restart reports-worker"

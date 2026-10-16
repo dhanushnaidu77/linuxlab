@@ -1,0 +1,19 @@
+id: restore-from-tarball
+title: Restore one file from a tarball backup
+skills: [files]
+difficulty: 2
+channel: backend
+persona: priya
+targets: [web01]
+vars:
+  CODE: { random: word }
+message: |
+  @dhan someone overwrote the portal homepage on web01 😩 it now says "test test". there's a backup tarball in
+  /var/backups/web/ — can you restore JUST the homepage? the rest of the site changed since and must stay as is 🙏
+secret_context: |
+  /var/backups/web/site-2026-10-01.tar.gz contains var/www/darkroom/ including index.html (which has the word "{{CODE}}" in it)
+  and other files that are now outdated. Only /var/www/darkroom/index.html should be restored; other files must not be reverted.
+hints:
+  - "You can list what's inside a tarball without extracting it, and extract a single member."
+  - "`tar tzf file.tar.gz` lists members (note the path prefix). `tar xzf file.tar.gz -C / <member>` extracts just one."
+  - "sudo tar xzf /var/backups/web/site-2026-10-01.tar.gz -C / var/www/darkroom/index.html"

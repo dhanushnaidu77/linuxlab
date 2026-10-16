@@ -71,3 +71,14 @@ test('picker favours the weakest skill', () => {
   }
   assert.ok(count.processes > count.files * 1.5, JSON.stringify(count));
 });
+
+test('picker still serves easy tickets to an advanced player (~20%)', () => {
+  const all = ['files', 'processes'];
+  const pool = [mk('easy-f', 'files', 1), mk('easy-p', 'processes', 2), mk('hard-f', 'files', 5), mk('hard-p', 'processes', 4)];
+  let easy = 0;
+  for (let i = 0; i < 2000; i++) {
+    const s = pickScenario({ scenarios: pool, mastery: { files: 100, processes: 90 }, unlocked: new Set(all), recentIds: [], rng: seededRng(i) });
+    if (s.difficulty <= 2) easy++;
+  }
+  assert.ok(easy > 300 && easy < 550, `easy picks: ${easy}/2000`);
+});

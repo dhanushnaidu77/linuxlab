@@ -1,0 +1,659 @@
+# Habit drills: systemd units, drop-ins, timers, journald.
+# Drill units carry a "# drill" comment so cleanup can find them. The journal is never wiped (other tasks may need it),
+# so journal-count drills ask about entries "since {{SINCE}}" and keep that time in /var/lib/lab-drill for `expect`.
+
+# ---------------------------------------------------------------- systemd
+
+- id: s-enable-at-boot
+  skill: systemd
+  difficulty: 1
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Service gone after every reboot
+  message: "report-sync on app01 is running now, but every reboot it's gone and someone has to start it by hand. fix that"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 5; done\n' > /usr/local/bin/report-sync; chmod 755 /usr/local/bin/report-sync
+    printf '# drill\n[Unit]\nDescription=Darkroom report sync\n[Service]\nExecStart=/usr/local/bin/report-sync\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/report-sync.service
+    systemctl daemon-reload; systemctl disable report-sync >/dev/null 2>&1; systemctl start report-sync
+  checks:
+    - ["systemctl is-enabled -q report-sync", "report-sync still isn't enabled, so it won't start at boot"]
+    - ["systemctl is-active -q report-sync", "report-sync isn't running right now"]
+  solve: "systemctl enable report-sync >/dev/null 2>&1"
+  cleanup: "systemctl disable --now report-sync >/dev/null 2>&1; rm -f /etc/systemd/system/report-sync.service /usr/local/bin/report-sync; systemctl daemon-reload"
+  hints:
+    - "Running now (active) and starting at boot (enabled) are two separate things."
+    - "`systemctl is-enabled report-sync`. `enable` hooks the unit into its target (multi-user.target)."
+    - "sudo systemctl enable report-sync"
+  solution: |
+    ```bash
+    systemctl is-active report-sync      # active
+    systemctl is-enabled report-sync     # disabled  <- the problem
+    sudo systemctl enable report-sync    # (enable --now = enable + start)
+    ```
+    `enable` creates a symlink in `multi-user.target.wants/`, taken from the unit's `[Install]` section.
+
+- id: s-restart-on-crash
+  skill: systemd
+  difficulty: 2
+  persona: tom
+  channel: backend
+  host: app01
+  title: Worker stays dead after crashing
+  message: "@dhan queue-worker on app01 crashes like once a day (known bug, fix coming) and then just stays dead until someone notices. can systemd bring it back automatically?"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 5; done\n' > /usr/local/bin/queue-worker; chmod 755 /usr/local/bin/queue-worker
+    rm -rf /etc/systemd/system/queue-worker.service.d
+    printf '# drill\n[Unit]\nDescription=Darkroom queue worker\n[Service]\nExecStart=/usr/local/bin/queue-worker\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/queue-worker.service
+    systemctl daemon-reload; systemctl enable --now queue-worker >/dev/null 2>&1
+  checks:
+    - ["[ \"$(systemctl show -p Restart --value queue-worker)\" != no ]", "queue-worker has no Restart= policy"]
+    - - |
+        systemctl is-active -q queue-worker || exit 1
+        old=$(systemctl show -p MainPID --value queue-worker); kill -9 $old
+        for i in $(seq 40); do new=$(systemctl show -p MainPID --value queue-worker); [ "$new" != 0 ] && [ "$new" != "$old" ] && systemctl is-active -q queue-worker && exit 0; sleep 0.25; done; exit 1
+      - "I kill -9'd queue-worker and it didn't come back within 10s"
+  solve: |
+    mkdir -p /etc/systemd/system/queue-worker.service.d
+    printf '[Service]\nRestart=on-failure\nRestartSec=2\n' > /etc/systemd/system/queue-worker.service.d/restart.conf
+    systemctl daemon-reload
+  cleanup: "systemctl disable --now queue-worker >/dev/null 2>&1; rm -rf /etc/systemd/system/queue-worker.service* /usr/local/bin/queue-worker; systemctl daemon-reload"
+  hints:
+    - "There's a [Service] setting that tells systemd what to do when the main process exits."
+    - "`Restart=on-failure` (plus `RestartSec=`). Put it in a drop-in with `systemctl edit queue-worker`."
+    - "sudo systemctl edit queue-worker  → [Service] Restart=on-failure  RestartSec=2"
+  solution: |
+    ```bash
+    sudo systemctl edit queue-worker      # opens a drop-in: .../queue-worker.service.d/override.conf
+    #   [Service]
+    #   Restart=on-failure
+    #   RestartSec=2
+    # (systemctl edit runs daemon-reload for you)
+    sudo kill -9 $(systemctl show -p MainPID --value queue-worker)    # test it
+    systemctl status queue-worker         # back, with a new PID
+    ```
+    `on-failure` restarts on crashes and non-zero exits but not on a clean `systemctl stop`. Watch out for StartLimitBurst: too many restarts in a short window and systemd gives up.
+
+- id: s-dropin-env
+  skill: systemd
+  difficulty: 2
+  persona: tom
+  channel: backend
+  host: app01
+  title: Debug logging via a drop-in
+  message: "@dhan can you set LOG_LEVEL=debug for darkroom-api on app01? marcus says use a drop-in, NOT editing the unit file itself. it needs to be in the running process obviously"
+  setup: |
+    rm -rf /etc/systemd/system/darkroom-api.service.d; sed -i '/LOG_LEVEL/d' /etc/systemd/system/darkroom-api.service
+    systemctl daemon-reload; systemctl restart darkroom-api; sleep 0.5
+  checks:
+    - ["systemctl show -p Environment --value darkroom-api | grep -q 'LOG_LEVEL=debug'", "darkroom-api's unit has no LOG_LEVEL=debug"]
+    - ["! grep -q LOG_LEVEL /etc/systemd/system/darkroom-api.service", "you edited darkroom-api.service itself. use a drop-in (.service.d/*.conf)"]
+    - ["tr '\\0' '\\n' < /proc/$(systemctl show -p MainPID --value darkroom-api)/environ | grep -qx LOG_LEVEL=debug", "the running darkroom-api process doesn't have LOG_LEVEL=debug yet"]
+    - ["curl -s -m5 localhost:8080/health | grep -q darkroom-api", "darkroom-api isn't answering on :8080"]
+  solve: |
+    mkdir -p /etc/systemd/system/darkroom-api.service.d
+    printf '[Service]\nEnvironment=LOG_LEVEL=debug\n' > /etc/systemd/system/darkroom-api.service.d/override.conf
+    systemctl daemon-reload; systemctl restart darkroom-api; sleep 0.5
+  cleanup: "rm -rf /etc/systemd/system/darkroom-api.service.d; systemctl daemon-reload; systemctl restart darkroom-api"
+  hints:
+    - "A drop-in is a small .conf file in `<unit>.service.d/` that overrides or extends the unit."
+    - "`systemctl edit darkroom-api` creates one. Add `[Service]` + `Environment=LOG_LEVEL=debug`, then restart the service."
+    - "sudo systemctl edit darkroom-api   ([Service] / Environment=LOG_LEVEL=debug)   then sudo systemctl restart darkroom-api"
+  solution: |
+    ```bash
+    sudo systemctl edit darkroom-api
+    #   [Service]
+    #   Environment=LOG_LEVEL=debug
+    sudo systemctl restart darkroom-api
+    systemctl cat darkroom-api            # unit file + drop-ins, in order
+    sudo cat /proc/$(systemctl show -p MainPID --value darkroom-api)/environ | tr '\0' '\n'
+    ```
+    Drop-ins survive package upgrades that overwrite the main unit file.
+
+- id: s-unmask
+  skill: systemd
+  difficulty: 1
+  persona: priya
+  channel: platform
+  host: web01
+  title: Portal down, nginx "masked"
+  message: "@dhan the portal is down 😬😬 tom tried `systemctl start nginx` on web01 and it says something about 'masked'?? the client demo is in 20 min 🙏"
+  setup: "systemctl stop nginx; systemctl mask nginx >/dev/null 2>&1"
+  checks:
+    - ["[ \"$(systemctl is-enabled nginx 2>/dev/null)\" = enabled ]", "nginx is still masked (or not enabled at boot)"]
+    - ["systemctl is-active -q nginx", "nginx isn't running"]
+    - ["curl -s -m5 -o /dev/null http://localhost/", "the portal on web01 doesn't answer on :80"]
+  solve: "systemctl unmask nginx >/dev/null 2>&1; systemctl enable --now nginx >/dev/null 2>&1"
+  cleanup: "systemctl unmask nginx >/dev/null 2>&1; systemctl enable --now nginx >/dev/null 2>&1; true"
+  hints:
+    - "Masked is stronger than disabled: the unit is linked to /dev/null, so nothing can start it."
+    - "`systemctl unmask`, then start it (and check it's enabled)."
+    - "sudo systemctl unmask nginx && sudo systemctl enable --now nginx"
+  solution: |
+    ```bash
+    systemctl is-enabled nginx            # masked
+    ls -l /etc/systemd/system/nginx.service   # -> /dev/null
+    sudo systemctl unmask nginx
+    sudo systemctl enable --now nginx
+    ```
+
+- id: s-failed-units
+  skill: systemd
+  difficulty: 1
+  persona: alertbot
+  channel: oncall-alerts
+  host: app01
+  title: Which services are failed?
+  message: "[ALERT] app01: systemd reports failed units. @dhan which services are in failed state? (names pls)"
+  setup: |
+    for f in $(grep -l '^# drill failed' /etc/systemd/system/*.service 2>/dev/null); do systemctl stop $(basename $f) 2>/dev/null; rm -f $f; done
+    systemctl daemon-reload; systemctl reset-failed
+    names=(invoice-push ledger-export pdf-render mail-relay geo-import cache-prime); n=$((RANDOM % 2 + 2))
+    for u in $(printf '%s\n' "${names[@]}" | shuf -n $n); do
+      printf '# drill failed\n[Unit]\nDescription=%s\n[Service]\nExecStart=/bin/sh -c "echo starting; exit 3"\n' $u > /etc/systemd/system/$u.service
+    done
+    printf '# drill failed\n[Unit]\nDescription=healthy one\n[Service]\nExecStart=/bin/sleep infinity\n' > /etc/systemd/system/thumb-cache.service
+    systemctl daemon-reload
+    for f in $(grep -l '^# drill failed' /etc/systemd/system/*.service); do systemctl start $(basename $f) 2>/dev/null; done; sleep 1
+  expect: "systemctl list-units --state=failed --no-legend --plain | awk '{print $1}' | sed 's/\\.service$//' | sort"
+  answer: set
+  extract: "the list of unit names, without the .service suffix"
+  cleanup: |
+    for f in $(grep -l '^# drill failed' /etc/systemd/system/*.service 2>/dev/null); do systemctl stop $(basename $f) 2>/dev/null; rm -f $f; done
+    systemctl daemon-reload; systemctl reset-failed
+  hints:
+    - "systemctl can filter units by state."
+    - "`systemctl --failed` (short for `systemctl list-units --state=failed`)."
+    - "systemctl --failed"
+  solution: |
+    ```bash
+    systemctl --failed
+    systemctl status <unit>         # why: exit code + the last log lines
+    sudo systemctl reset-failed     # clear the list once you've dealt with them
+    ```
+
+- id: s-exit-code
+  skill: systemd
+  difficulty: 1
+  persona: ana
+  channel: data
+  host: app01
+  title: What exit code did the batch fail with?
+  message: "@dhan the invoice-batch job on app01 failed this morning. what exit code did it return? the vendor docs map codes to causes"
+  setup: |
+    c=$(shuf -n1 -e 2 3 4 5 6 7 9 11 12 17 21 64 65 70 75 78)
+    printf '# drill\n[Unit]\nDescription=Invoice batch\n[Service]\nType=oneshot\nExecStart=/bin/sh -c "echo processing invoices; sleep 0.2; echo giving up >&2; exit %s"\n' $c > /etc/systemd/system/invoice-batch.service
+    systemctl daemon-reload; systemctl reset-failed invoice-batch 2>/dev/null; systemctl start invoice-batch 2>/dev/null; true
+  expect: "systemctl show -p ExecMainStatus --value invoice-batch"
+  answer: number
+  extract: "the exit code"
+  cleanup: "systemctl reset-failed invoice-batch 2>/dev/null; rm -f /etc/systemd/system/invoice-batch.service; systemctl daemon-reload"
+  hints:
+    - "systemd records how the main process exited."
+    - "`systemctl status invoice-batch` shows `code=exited, status=N`. The journal shows it too."
+    - "systemctl status invoice-batch   (or: systemctl show -p ExecMainStatus invoice-batch)"
+  solution: |
+    ```bash
+    systemctl status invoice-batch                  # Main PID: ... (code=exited, status=N)
+    systemctl show -p ExecMainStatus invoice-batch
+    journalctl -u invoice-batch -n 20               # the output around the failure
+    ```
+
+- id: s-run-as-user
+  skill: systemd
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: app01
+  title: Service shouldn't run as root
+  message: "@dhan export-worker on app01 runs as root. no reason for that. make it run as the `reports` user (create it if needed, system account, no login)"
+  setup: |
+    userdel reports 2>/dev/null; rm -rf /srv/export; mkdir -p /srv/export
+    printf '#!/bin/bash\nwhile :; do date > /srv/export/heartbeat; sleep 3; done\n' > /usr/local/bin/export-worker; chmod 755 /usr/local/bin/export-worker
+    printf '# drill\n[Unit]\nDescription=Darkroom export worker\n[Service]\nExecStart=/usr/local/bin/export-worker\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/export-worker.service
+    rm -rf /etc/systemd/system/export-worker.service.d; systemctl daemon-reload; systemctl enable --now export-worker >/dev/null 2>&1
+  checks:
+    - ["[ \"$(ps -o user= -p $(systemctl show -p MainPID --value export-worker))\" = reports ]", "export-worker's main process isn't running as reports"]
+    - ["systemctl is-active -q export-worker", "export-worker isn't running"]
+    - ["sleep 4; [ $(( $(date +%s) - $(stat -c %Y /srv/export/heartbeat) )) -lt 8 ]", "export-worker runs, but /srv/export/heartbeat isn't being updated. can the new user write there?"]
+    - ["! getent passwd reports | grep -qE ':(/bin/bash|/bin/sh)$'", "the reports account has a login shell. it should be a no-login system account"]
+  solve: |
+    useradd -r -s /usr/sbin/nologin reports; chown reports: /srv/export /srv/export/heartbeat
+    mkdir -p /etc/systemd/system/export-worker.service.d; printf '[Service]\nUser=reports\n' > /etc/systemd/system/export-worker.service.d/user.conf
+    systemctl daemon-reload; systemctl restart export-worker; sleep 0.5
+  cleanup: "systemctl disable --now export-worker >/dev/null 2>&1; rm -rf /etc/systemd/system/export-worker.service* /usr/local/bin/export-worker /srv/export; userdel reports 2>/dev/null; systemctl daemon-reload"
+  hints:
+    - "Three steps: create the account, let it write where the service writes, tell the unit which user to run as."
+    - "`useradd -r -s /usr/sbin/nologin reports`, `chown` its data directory, then `User=reports` in a drop-in and restart."
+    - "sudo useradd -r -s /usr/sbin/nologin reports; sudo chown -R reports: /srv/export; sudo systemctl edit export-worker ([Service] User=reports); sudo systemctl restart export-worker"
+  solution: |
+    ```bash
+    sudo useradd -r -s /usr/sbin/nologin reports
+    sudo chown -R reports: /srv/export
+    sudo systemctl edit export-worker      # [Service]  User=reports
+    sudo systemctl restart export-worker
+    ps -o user,pid,cmd -C export-worker
+    ```
+    Forget the chown and the service still starts, but every write fails with "Permission denied". Check `journalctl -u export-worker`.
+
+- id: s-daemon-reload
+  skill: systemd
+  difficulty: 2
+  persona: tom
+  channel: backend
+  host: app01
+  title: Changed the port, nothing happened
+  message: "@dhan I changed stats-api on app01 to port 9200 in the unit file and restarted it like 5 times, it's STILL on 9100 ngl I'm losing it"
+  setup: |
+    mkdir -p /srv/stats && echo ok > /srv/stats/index.html
+    printf '# drill\n[Unit]\nDescription=Darkroom stats API\n[Service]\nExecStart=/usr/bin/python3 -m http.server --directory /srv/stats 9100\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/stats-api.service
+    systemctl daemon-reload; systemctl enable stats-api >/dev/null 2>&1; systemctl restart stats-api
+    sed -i 's/ 9100$/ 9200/' /etc/systemd/system/stats-api.service; systemctl restart stats-api 2>/dev/null; sleep 1
+  checks:
+    - ["ss -Hltn 'sport = :9200' | grep -q .", "nothing listens on :9200"]
+    - ["! ss -Hltn 'sport = :9100' | grep -q .", "something still listens on :9100"]
+    - ["[ \"$(systemctl show -p NeedDaemonReload --value stats-api)\" = no ]", "systemd still has an outdated copy of the unit (NeedDaemonReload=yes)"]
+  solve: "systemctl daemon-reload; systemctl restart stats-api; sleep 1"
+  cleanup: "systemctl disable --now stats-api >/dev/null 2>&1; rm -f /etc/systemd/system/stats-api.service; rm -rf /srv/stats; systemctl daemon-reload"
+  hints:
+    - "systemd reads unit files into memory. Editing the file doesn't change what it already loaded."
+    - "`systemctl status stats-api` warns about it. One command reloads every unit definition."
+    - "sudo systemctl daemon-reload && sudo systemctl restart stats-api"
+  solution: |
+    ```bash
+    systemctl status stats-api      # "Warning: The unit file ... changed on disk. Run 'systemctl daemon-reload'"
+    sudo systemctl daemon-reload
+    sudo systemctl restart stats-api
+    ss -ltn 'sport = :9200'
+    ```
+    `systemctl edit` reloads for you. Editing the file directly with vim doesn't.
+
+- id: s-mask-decommission
+  skill: systemd
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: app01
+  title: Kill legacy-poller for good
+  message: "@dhan decommission `legacy-poller` on app01: stop it, and make sure it can NEVER start again, not at boot, not by hand, not pulled in by another unit. keep the files, we may need them for the audit"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 5; done\n' > /usr/local/bin/legacy-poller; chmod 755 /usr/local/bin/legacy-poller
+    printf '# drill\n[Unit]\nDescription=Legacy poller\n[Service]\nExecStart=/usr/local/bin/legacy-poller\n[Install]\nWantedBy=multi-user.target\n' > /usr/lib/systemd/system/legacy-poller.service
+    rm -f /etc/systemd/system/legacy-poller.service; systemctl daemon-reload; systemctl enable --now legacy-poller >/dev/null 2>&1
+  checks:
+    - ["! systemctl is-active -q legacy-poller", "legacy-poller is still running"]
+    - ["[ \"$(systemctl is-enabled legacy-poller 2>/dev/null)\" = masked ]", "legacy-poller isn't masked, so it can still be started (disable only stops it starting at boot)"]
+    - ["[ -f /usr/lib/systemd/system/legacy-poller.service ] && [ -x /usr/local/bin/legacy-poller ]", "the unit file or binary was deleted. keep them for the audit"]
+  solve: "systemctl disable --now legacy-poller >/dev/null 2>&1; systemctl mask legacy-poller >/dev/null 2>&1"
+  cleanup: "systemctl unmask legacy-poller >/dev/null 2>&1; systemctl disable --now legacy-poller >/dev/null 2>&1; rm -f /usr/lib/systemd/system/legacy-poller.service /usr/local/bin/legacy-poller; systemctl daemon-reload"
+  hints:
+    - "Disabled units can still be started by hand or as a dependency. There's a stronger state."
+    - "`systemctl mask` links the unit to /dev/null. Combine it with `--now` or a stop."
+    - "sudo systemctl disable --now legacy-poller && sudo systemctl mask legacy-poller"
+  solution: |
+    ```bash
+    sudo systemctl disable --now legacy-poller
+    sudo systemctl mask legacy-poller          # /etc/systemd/system/legacy-poller.service -> /dev/null
+    sudo systemctl start legacy-poller         # "Unit legacy-poller.service is masked."
+    ```
+    | state | at boot | by hand / as dependency |
+    |---|---|---|
+    | enabled | yes | yes |
+    | disabled | no | yes |
+    | masked | no | no |
+
+- id: s-timer
+  skill: systemd
+  difficulty: 3
+  persona: ana
+  channel: data
+  host: app01
+  title: Run the purge every 15 minutes
+  message: "@dhan can you run /opt/darkroom/purge-tmp.sh on app01 every 15 minutes? marcus wants a systemd timer, not cron. call it purge-tmp pls"
+  setup: |
+    printf '#!/bin/bash\nfind /srv/reports -name "*.tmp" -mmin +60 -delete\ntouch /var/tmp/purge-ran\n' > /opt/darkroom/purge-tmp.sh; chmod 755 /opt/darkroom/purge-tmp.sh
+    systemctl disable --now purge-tmp.timer >/dev/null 2>&1; rm -f /etc/systemd/system/purge-tmp.*; systemctl daemon-reload
+  checks:
+    - ["systemctl is-enabled -q purge-tmp.timer", "purge-tmp.timer doesn't exist or isn't enabled"]
+    - ["systemctl is-active -q purge-tmp.timer", "purge-tmp.timer isn't active (started)"]
+    - ["systemctl show -p TimersCalendar -p TimersMonotonic purge-tmp.timer | grep -Eq '/15|0,15,30,45|15min|900'", "the timer doesn't look like every 15 minutes"]
+    - ["rm -f /var/tmp/purge-ran; systemctl start purge-tmp.service; sleep 1; [ -f /var/tmp/purge-ran ]", "starting purge-tmp.service doesn't run /opt/darkroom/purge-tmp.sh"]
+  solve: |
+    printf '[Unit]\nDescription=Purge old report temp files\n[Service]\nType=oneshot\nExecStart=/opt/darkroom/purge-tmp.sh\n' > /etc/systemd/system/purge-tmp.service
+    printf '[Unit]\nDescription=Purge temp files every 15 min\n[Timer]\nOnCalendar=*:0/15\nPersistent=true\n[Install]\nWantedBy=timers.target\n' > /etc/systemd/system/purge-tmp.timer
+    systemctl daemon-reload; systemctl enable --now purge-tmp.timer >/dev/null 2>&1
+  cleanup: "systemctl disable --now purge-tmp.timer >/dev/null 2>&1; rm -f /etc/systemd/system/purge-tmp.* /opt/darkroom/purge-tmp.sh /var/tmp/purge-ran; systemctl daemon-reload"
+  hints:
+    - "You need two units with the same name: a .service that does the work (Type=oneshot) and a .timer that triggers it."
+    - "Timer: `[Timer] OnCalendar=*:0/15` + `[Install] WantedBy=timers.target`. Check the expression with `systemd-analyze calendar '*:0/15'`."
+    - "write purge-tmp.service (ExecStart=/opt/darkroom/purge-tmp.sh) + purge-tmp.timer (OnCalendar=*:0/15), daemon-reload, sudo systemctl enable --now purge-tmp.timer"
+  solution: |
+    ```ini
+    # /etc/systemd/system/purge-tmp.service
+    [Unit]
+    Description=Purge old report temp files
+    [Service]
+    Type=oneshot
+    ExecStart=/opt/darkroom/purge-tmp.sh
+
+    # /etc/systemd/system/purge-tmp.timer
+    [Unit]
+    Description=Purge temp files every 15 min
+    [Timer]
+    OnCalendar=*:0/15
+    Persistent=true
+    [Install]
+    WantedBy=timers.target
+    ```
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now purge-tmp.timer     # enable the TIMER, not the service
+    systemctl list-timers purge-tmp.timer
+    ```
+
+- id: s-memory-limit
+  skill: systemd
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Cap a service's memory
+  message: "batch-runner on app01 ate all the RAM again last night. cap it at 256M with systemd. persistent, and without editing the unit file"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 5; done\n' > /usr/local/bin/batch-runner; chmod 755 /usr/local/bin/batch-runner
+    printf '# drill\n[Unit]\nDescription=Darkroom batch runner\n[Service]\nExecStart=/usr/local/bin/batch-runner\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/batch-runner.service
+    rm -rf /etc/systemd/system/batch-runner.service.d /etc/systemd/system.control/batch-runner.service.d
+    systemctl daemon-reload; systemctl enable --now batch-runner >/dev/null 2>&1
+  checks:
+    - ["[ \"$(systemctl show -p MemoryMax --value batch-runner)\" = 268435456 ]", "batch-runner's MemoryMax isn't 256M"]
+    - ["systemctl is-active -q batch-runner", "batch-runner isn't running"]
+    - ["! grep -q MemoryMax /etc/systemd/system/batch-runner.service", "you edited the unit file. use a drop-in or set-property"]
+    - ["systemctl cat batch-runner | grep -Eq '^MemoryMax=(256M|268435456)'", "the limit isn't in a drop-in, so it won't survive a reboot (set-property --runtime?)"]
+  solve: "systemctl set-property batch-runner MemoryMax=256M"
+  cleanup: "systemctl disable --now batch-runner >/dev/null 2>&1; rm -rf /etc/systemd/system/batch-runner.service* /etc/systemd/system.control/batch-runner.service.d /usr/local/bin/batch-runner; systemctl daemon-reload"
+  hints:
+    - "Memory limits are cgroup settings that systemd manages per unit."
+    - "`systemctl set-property <unit> MemoryMax=256M` applies it live AND writes a drop-in. Or add it to a drop-in by hand with `systemctl edit`."
+    - "sudo systemctl set-property batch-runner MemoryMax=256M"
+  solution: |
+    ```bash
+    sudo systemctl set-property batch-runner MemoryMax=256M     # live + persistent
+    systemctl show -p MemoryMax batch-runner                    # 268435456
+    systemctl cat batch-runner                                  # shows the system.control drop-in
+    systemd-cgtop                                               # live usage per unit
+    ```
+    If the service goes over MemoryMax, the kernel OOM-kills it inside its own cgroup, and the rest of the box survives.
+
+- id: s-unit-user
+  skill: systemd
+  difficulty: 1
+  persona: raj
+  channel: it-helpdesk
+  host: app01
+  title: Which account runs the service?
+  vars:
+    U: { pick: [svc-ledger, ledgerd, finance-bot, etl] }
+  message: "hi @dhan! for the access review: which user account does the `ledger-sync` service on app01 run as? 🙏"
+  setup: |
+    id $U >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin $U
+    printf '#!/bin/bash\nwhile :; do sleep 5; done\n' > /usr/local/bin/ledger-sync; chmod 755 /usr/local/bin/ledger-sync
+    printf '# drill\n[Unit]\nDescription=Ledger sync\n[Service]\nUser=%s\nExecStart=/usr/local/bin/ledger-sync\n' $U > /etc/systemd/system/ledger-sync.service
+    systemctl daemon-reload; systemctl restart ledger-sync
+  expect: "systemctl show -p User --value ledger-sync"
+  answer: exact
+  extract: "the username"
+  cleanup: "systemctl stop ledger-sync; rm -f /etc/systemd/system/ledger-sync.service /usr/local/bin/ledger-sync; systemctl daemon-reload"
+  hints:
+    - "Either read the unit file, or look at the running process."
+    - "`systemctl cat ledger-sync` for User=, or `ps -o user= -p <MainPID>`."
+    - "systemctl show -p User ledger-sync"
+  solution: |
+    ```bash
+    systemctl cat ledger-sync | grep User=
+    ps -o user,pid,cmd -p $(systemctl show -p MainPID --value ledger-sync)
+    ```
+
+# ---------------------------------------------------------------- logs
+
+- id: l-count-errors-since
+  skill: logs
+  difficulty: 1
+  persona: ana
+  channel: data
+  host: app01
+  title: Errors since the deploy
+  vars:
+    SINCE: { from_setup: true }
+  message: "@dhan how many ERROR messages has payment-sync logged on app01 since the deploy at {{SINCE}} UTC? it logs to the journal"
+  setup: |
+    mkdir -p /var/lib/lab-drill; s=$(date +%H:%M); echo "$s" > /var/lib/lab-drill/l-count-errors-since; echo "SINCE=$s"
+    for i in $(seq $((RANDOM % 15 + 25))); do
+      case $((RANDOM % 4)) in
+        0) logger -t payment-sync "ERROR card processor timeout (batch $i)";;
+        1) logger -t payment-api "ERROR upstream 502 on /charge";;
+        *) logger -t payment-sync "INFO processed batch $i";;
+      esac
+    done; sleep 1
+  expect: "journalctl -q -t payment-sync --since \"$(cat /var/lib/lab-drill/l-count-errors-since)\" -o cat | grep -c ERROR"
+  answer: number
+  extract: "the number of errors"
+  hints:
+    - "The journal can filter by the program's identifier (tag) and by time."
+    - "`journalctl -t payment-sync --since HH:MM`. Count with grep -c. Careful: payment-api is a different program."
+    - "journalctl -t payment-sync --since {{SINCE}} | grep -c ERROR"
+  solution: |
+    ```bash
+    journalctl -t payment-sync --since {{SINCE}} -o cat | grep -c ERROR
+    journalctl -t payment-sync --since {{SINCE}} -g ERROR    # -g = grep inside journalctl
+    ```
+    `-t` matches SYSLOG_IDENTIFIER (what `logger -t` sets). `-u` matches a systemd unit.
+
+- id: l-priority-filter
+  skill: logs
+  difficulty: 2
+  persona: kofi
+  channel: platform
+  host: app01
+  title: Warnings and worse
+  vars:
+    SINCE: { from_setup: true }
+  message: "hey @dhan 🙌 how many messages at WARNING priority or worse has ledger-export logged since {{SINCE}} UTC? (journal priority, not the text)"
+  setup: |
+    mkdir -p /var/lib/lab-drill; s=$(date +%H:%M); echo "$s" > /var/lib/lab-drill/l-priority-filter; echo "SINCE=$s"
+    p=(debug info info notice warning err crit info)
+    for i in $(seq $((RANDOM % 15 + 20))); do pr=${p[$((RANDOM % 8))]}; logger -t ledger-export -p user.$pr "row batch $i done"; done; sleep 1
+  expect: "journalctl -q -t ledger-export -p warning --since \"$(cat /var/lib/lab-drill/l-priority-filter)\" -o cat | wc -l"
+  answer: number
+  extract: "the number of messages"
+  hints:
+    - "Every journal entry has a syslog priority (0 emerg … 7 debug). The message text doesn't say which."
+    - "`journalctl -p warning` shows warning AND everything more severe (err, crit, …)."
+    - "journalctl -t ledger-export -p warning --since {{SINCE}} -o cat | wc -l"
+  solution: |
+    ```bash
+    journalctl -t ledger-export -p warning --since {{SINCE}} -o cat | wc -l
+    journalctl -t ledger-export --since {{SINCE}} -o verbose | grep PRIORITY   # see each one's number
+    journalctl -p err..crit        # a range
+    ```
+
+- id: l-failure-reason
+  skill: logs
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: Why does etl-loader fail?
+  message: "etl-loader on app01 fails right away when it starts. what's it complaining about? I think it's missing some config file, which one?"
+  setup: |
+    f=/etc/etl/$(shuf -n1 -e sources mappings warehouse credentials schedule).yaml
+    printf '# drill\n[Unit]\nDescription=ETL loader\n[Service]\nExecStart=/bin/sh -c "echo etl-loader starting; echo FATAL: cannot open %s: No such file or directory >&2; exit 1"\n' $f > /etc/systemd/system/etl-loader.service
+    systemctl daemon-reload; systemctl reset-failed etl-loader 2>/dev/null; systemctl start etl-loader 2>/dev/null; sleep 1
+  expect: "journalctl -q -u etl-loader -o cat | grep -oP 'cannot open \\K[^:]+' | tail -1"
+  answer: exact
+  extract: "the file path"
+  cleanup: "systemctl reset-failed etl-loader 2>/dev/null; rm -f /etc/systemd/system/etl-loader.service; systemctl daemon-reload"
+  hints:
+    - "A service's stdout/stderr go to the journal."
+    - "`journalctl -u etl-loader`. `-e` jumps to the end, `-n 20` shows the last 20 lines."
+    - "journalctl -u etl-loader -n 20"
+  solution: |
+    ```bash
+    systemctl status etl-loader        # last few lines, often enough
+    journalctl -u etl-loader -n 20     # more context
+    journalctl -u etl-loader -p err    # only stderr / error-level lines
+    ```
+
+- id: l-who-restarted
+  skill: logs
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Who restarted the API?
+  vars:
+    U: { random: user }
+  message: "someone just restarted darkroom-api on app01 with sudo, in the middle of a deploy. who. username"
+  setup: |
+    for u in $U carlos-d hana-k; do id $u >/dev/null 2>&1 || useradd -m -s /bin/bash $u; done
+    printf '%s ALL=(root) NOPASSWD: /usr/bin/systemctl, /usr/bin/journalctl\n' $U carlos-d hana-k > /etc/sudoers.d/lab-drill; chmod 440 /etc/sudoers.d/lab-drill
+    runuser -u carlos-d -- sudo /usr/bin/journalctl -n1 >/dev/null 2>&1
+    runuser -u $U -- sudo /usr/bin/systemctl restart darkroom-api
+    runuser -u hana-k -- sudo /usr/bin/systemctl status darkroom-api >/dev/null 2>&1; sleep 1
+  expect: "journalctl -q _COMM=sudo -o cat | grep 'COMMAND=/usr/bin/systemctl restart darkroom-api' | tail -1 | awk '{print $1}'"
+  answer: exact
+  extract: "the username"
+  cleanup: "rm -f /etc/sudoers.d/lab-drill"
+  hints:
+    - "sudo logs every command it runs, including who ran it."
+    - "Filter the journal on the sudo program: `journalctl _COMM=sudo` (or `-t sudo`). Look for the restart."
+    - "journalctl _COMM=sudo | grep 'restart darkroom-api'"
+  solution: |
+    ```bash
+    journalctl _COMM=sudo --since -1h | grep 'restart darkroom-api'
+    #   <user> : PWD=/ ; USER=root ; COMMAND=/usr/bin/systemctl restart darkroom-api
+    journalctl -u darkroom-api --since -1h       # when it actually restarted
+    ```
+    On boxes without journald, look in /var/log/auth.log.
+
+- id: l-ssh-invalid-users
+  skill: logs
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: web01
+  title: Which usernames were tried over SSH?
+  vars:
+    SINCE: { from_setup: true }
+  message: "@dhan someone has been trying to ssh into web01 with usernames that don't exist since {{SINCE}} UTC. which usernames did they try?"
+  setup: |
+    mkdir -p /var/lib/lab-drill; s=$(date +%H:%M); echo "$s" > /var/lib/lab-drill/l-ssh-invalid-users; echo "SINCE=$s"
+    for u in $(shuf -n $((RANDOM % 3 + 3)) -e admin oracle test deploy postgres ubnt pi git ftpuser support); do
+      for i in $(seq $((RANDOM % 3 + 1))); do timeout 5 ssh -n -o BatchMode=yes -o ConnectTimeout=3 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $u@localhost true >/dev/null 2>&1; done
+    done; sleep 1
+  expect: "journalctl -q -t sshd --since \"$(cat /var/lib/lab-drill/l-ssh-invalid-users)\" -o cat | grep -oP '^Invalid user \\K\\S+' | sort -u"
+  answer: set
+  extract: "the list of usernames"
+  hints:
+    - "sshd logs every login attempt for an account that doesn't exist."
+    - "`journalctl -u ssh` (or `-t sshd`) since that time, then look for 'Invalid user'."
+    - "journalctl -t sshd --since {{SINCE}} | grep 'Invalid user' | awk '{print $8}' | sort -u"
+  solution: |
+    ```bash
+    journalctl -t sshd --since {{SINCE}} -o cat | grep '^Invalid user' | awk '{print $3}' | sort | uniq -c
+    #   Invalid user oracle from 127.0.0.1 port 51234
+    ```
+    `-o cat` drops the timestamp/host prefix, so field numbers stay the same.
+
+- id: l-persistent-journal
+  skill: logs
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: db01
+  title: Logs vanish on every reboot
+  message: "@dhan db01 loses all its logs every time it reboots. which makes postmortems impossible. make the journal persistent"
+  setup: |
+    mkdir -p /etc/systemd/journald.conf.d; printf '[Journal]\nStorage=volatile\n' > /etc/systemd/journald.conf.d/50-lab.conf
+    systemctl restart systemd-journald; rm -rf /var/log/journal; sleep 1
+  checks:
+    - ["! systemd-analyze cat-config systemd/journald.conf | grep -Eq '^Storage=(volatile|none)'", "journald is still configured with Storage=volatile"]
+    - ["ls /var/log/journal/*/system.journal", "journald isn't writing to /var/log/journal (did you restart it?)"]
+    - ["systemctl is-active -q systemd-journald", "journald isn't running"]
+  solve: |
+    rm -f /etc/systemd/journald.conf.d/50-lab.conf; mkdir -p /var/log/journal; systemd-tmpfiles --create --prefix /var/log/journal
+    systemctl restart systemd-journald; journalctl --flush; sleep 1
+  cleanup: |
+    rm -f /etc/systemd/journald.conf.d/50-lab.conf; mkdir -p /var/log/journal; systemd-tmpfiles --create --prefix /var/log/journal
+    systemctl restart systemd-journald; journalctl --flush
+  hints:
+    - "journald keeps logs in /run (RAM) or in /var/log/journal (disk), depending on its Storage= setting."
+    - "`systemd-analyze cat-config systemd/journald.conf` shows the effective config, drop-ins included. With Storage=auto (the default), the /var/log/journal directory has to exist."
+    - "remove the Storage=volatile drop-in, sudo mkdir -p /var/log/journal, sudo systemctl restart systemd-journald"
+  solution: |
+    ```bash
+    systemd-analyze cat-config systemd/journald.conf | grep -v '^#'   # Storage=volatile (in a drop-in!)
+    sudo rm /etc/systemd/journald.conf.d/50-lab.conf      # or set Storage=persistent
+    sudo mkdir -p /var/log/journal && sudo systemd-tmpfiles --create --prefix /var/log/journal
+    sudo systemctl restart systemd-journald
+    journalctl --header | grep 'File path'                # /var/log/journal/...
+    journalctl --list-boots                               # will now span reboots
+    ```
+
+- id: l-journal-size-cap
+  skill: logs
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Cap the journal size
+  message: "app01's journal has no size cap and the disk is small. limit the persistent journal to 100M. and it has to actually be in effect, not just in a file"
+  setup: |
+    rm -f /etc/systemd/journald.conf.d/*.conf; sed -i '/^SystemMaxUse=/d' /etc/systemd/journald.conf
+    systemctl restart systemd-journald; sleep 1
+  checks:
+    - ["systemd-analyze cat-config systemd/journald.conf | grep -Eq '^SystemMaxUse=100M'", "SystemMaxUse=100M isn't in journald's config"]
+    - ["journalctl -q -u systemd-journald --since -10min -o cat | grep -q 'max 100.0M'", "journald hasn't picked up the new limit (restart it)"]
+  solve: |
+    mkdir -p /etc/systemd/journald.conf.d; printf '[Journal]\nSystemMaxUse=100M\n' > /etc/systemd/journald.conf.d/size.conf
+    systemctl restart systemd-journald; sleep 1
+  cleanup: "rm -f /etc/systemd/journald.conf.d/size.conf; systemctl restart systemd-journald"
+  hints:
+    - "journald's disk limits live in journald.conf, or better in a drop-in under journald.conf.d/."
+    - "`SystemMaxUse=100M` in a `[Journal]` section, then restart systemd-journald. It logs the new max when it starts."
+    - "printf '[Journal]\\nSystemMaxUse=100M\\n' | sudo tee /etc/systemd/journald.conf.d/size.conf; sudo systemctl restart systemd-journald"
+  solution: |
+    ```bash
+    sudo mkdir -p /etc/systemd/journald.conf.d
+    printf '[Journal]\nSystemMaxUse=100M\n' | sudo tee /etc/systemd/journald.conf.d/size.conf
+    sudo systemctl restart systemd-journald
+    journalctl -u systemd-journald -n 5      # "System Journal ... is 8.0M, max 100.0M, ..."
+    journalctl --disk-usage
+    sudo journalctl --vacuum-size=100M       # shrink right now instead of waiting
+    ```
+
+- id: l-logger-tag
+  skill: logs
+  difficulty: 1
+  persona: ana
+  channel: data
+  host: app01
+  title: Make the backup script log to the journal
+  message: "@dhan /opt/darkroom/backup.sh on app01 just echoes 'backup finished' into the void. can it log that to the journal with the tag `backup` instead, so we can alert on it?"
+  setup: |
+    printf '#!/bin/bash\ntar czf /var/tmp/darkroom-backup.tgz /etc/darkroom 2>/dev/null\necho "backup finished"\n' > /opt/darkroom/backup.sh; chmod 755 /opt/darkroom/backup.sh
+  checks:
+    - ["rm -f /var/tmp/darkroom-backup.tgz; /opt/darkroom/backup.sh >/dev/null 2>&1; sleep 1; journalctl -q -t backup --since -20s -o cat | grep -q 'backup finished'", "I ran backup.sh and nothing with tag 'backup' saying 'backup finished' showed up in the journal"]
+    - ["[ -s /var/tmp/darkroom-backup.tgz ]", "backup.sh no longer creates the backup tarball"]
+  solve: "sed -i 's/^echo \"backup finished\"$/logger -t backup \"backup finished\"/' /opt/darkroom/backup.sh"
+  cleanup: "rm -f /opt/darkroom/backup.sh /var/tmp/darkroom-backup.tgz"
+  hints:
+    - "There's a standard command that sends a line to syslog/the journal from a shell script."
+    - "`logger -t <tag> \"message\"`. Then check it with `journalctl -t <tag>`."
+    - "replace the echo with: logger -t backup \"backup finished\""
+  solution: |
+    ```bash
+    sudo sed -i 's/^echo "backup finished"$/logger -t backup "backup finished"/' /opt/darkroom/backup.sh
+    sudo /opt/darkroom/backup.sh && journalctl -t backup -n 3
+    # alternatives: logger -t backup -p user.err "backup FAILED"   (set a priority)
+    #               some-cmd 2>&1 | systemd-cat -t backup          (pipe a whole command's output)
+    ```

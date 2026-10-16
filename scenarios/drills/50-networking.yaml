@@ -1,0 +1,844 @@
+# Habit drills: addresses & routes, DNS, sockets, nftables, tcpdump, TLS.
+# Cross-host setup/checks go through `runuser -u dhan -- ssh <host>` (shared lab key, passwordless sudo).
+
+# ---------------------------------------------------------------- ip-routing
+
+- id: d-find-secondary-ip
+  skill: ip-routing
+  difficulty: 1
+  persona: leah
+  channel: netops
+  host: app01
+  title: Undocumented second IP
+  message: "@dhan someone added a second IP to app01 for the new metrics vhost and didn't document it 🙄 what is it?"
+  setup: |
+    for a in $(ip -4 -o addr show dev eth0 | awk '{print $4}' | grep -v '^10\.10\.3\.10/'); do ip addr del $a dev eth0; done
+    ip addr add 10.10.3.$((RANDOM % 80 + 100))/24 dev eth0
+  expect: "ip -4 -o addr show dev eth0 | awk '{print $4}' | cut -d/ -f1 | grep -vx 10.10.3.10"
+  answer: exact
+  extract: "the IP address (without the /prefix)"
+  cleanup: "for a in $(ip -4 -o addr show dev eth0 | awk '{print $4}' | grep -v '^10\\.10\\.3\\.10/'); do ip addr del $a dev eth0; done"
+  hints:
+    - "List the addresses on the interface; one of them isn't app01's usual 10.10.3.10."
+    - "`ip -br a` gives one line per interface with every address on it."
+    - "ip -4 -br addr show dev eth0"
+  solution: |
+    ```bash
+    ip -br a                     # brief: iface, state, all addresses
+    ip -4 addr show dev eth0     # full detail (secondary addrs are flagged "secondary")
+    ```
+    `ifconfig` only shows the primary address unless the secondary has a label. `ip` shows everything.
+
+- id: d-add-secondary-ip
+  skill: ip-routing
+  difficulty: 1
+  persona: leah
+  channel: netops
+  host: app01
+  title: Add an address to app01
+  message: "@dhan please add 10.10.3.15/24 to eth0 on app01 (for the new reporting vhost). keep the existing address obviously 😅"
+  setup: "ip addr del 10.10.3.15/24 dev eth0 2>/dev/null; true"
+  checks:
+    - ["ip -4 -o addr show dev eth0 | grep -q ' 10.10.3.15/24 '", "10.10.3.15/24 isn't on eth0"]
+    - ["ip -4 -o addr show dev eth0 | grep -q ' 10.10.3.10/24 '", "app01's main address 10.10.3.10 is gone!"]
+    - ["ip route show default | grep -q 'via 10.10.3.1'", "app01's default route is gone"]
+  solve: "ip addr add 10.10.3.15/24 dev eth0"
+  cleanup: "ip addr del 10.10.3.15/24 dev eth0 2>/dev/null; true"
+  hints:
+    - "`ip addr` can add an address next to the existing one. It doesn't replace it."
+    - "`ip addr add <ip>/<prefix> dev <iface>`. Check the interface name with `ip -br l`."
+    - "sudo ip addr add 10.10.3.15/24 dev eth0"
+  solution: |
+    ```bash
+    sudo ip addr add 10.10.3.15/24 dev eth0
+    ip -br a                                   # both addresses now
+    sudo ip addr del 10.10.3.15/24 dev eth0    # undo
+    ```
+    This is runtime only. On a real Ubuntu box, list both addresses under `addresses:` in `/etc/netplan/*.yaml` and run `netplan apply`.
+
+- id: d-route-get
+  skill: ip-routing
+  difficulty: 2
+  persona: leah
+  channel: netops
+  host: app01
+  title: Which gateway for that network?
+  vars:
+    NET: { pick: [172.20.5, 172.20.9, 192.168.40, 192.168.77] }
+  message: "@dhan sanity check for me: when app01 sends traffic to {{NET}}.25, which gateway IP does it go through?"
+  setup: |
+    ip route del $NET.0/24 2>/dev/null; ip route del ${NET%.*}.0.0/16 2>/dev/null
+    g=$((RANDOM % 40 + 200)); ip route add ${NET%.*}.0.0/16 via 10.10.3.$((g - 100)); ip route add $NET.0/24 via 10.10.3.$g
+  expect: "ip route get $NET.25 | grep -oP 'via \\K\\S+'"
+  answer: exact
+  extract: "the gateway IP"
+  cleanup: "ip route del $NET.0/24 2>/dev/null; ip route del ${NET%.*}.0.0/16 2>/dev/null; true"
+  hints:
+    - "More than one route might cover that address. The most specific one (longest prefix) wins."
+    - "Don't work it out by hand: `ip route get <ip>` asks the kernel which route it would actually use."
+    - "ip route get {{NET}}.25"
+  solution: |
+    ```bash
+    ip route                  # a /16 AND a /24 both cover the address
+    ip route get {{NET}}.25   # the kernel's answer: the /24 wins (longest prefix match)
+    ```
+    `ip route get` is the fastest way to answer "which way would this packet go?". It also shows the source IP that would be used.
+
+- id: d-add-static-route
+  skill: ip-routing
+  difficulty: 2
+  persona: leah
+  channel: netops
+  host: app01
+  title: Route to the partner network
+  message: "@dhan app01 needs to reach the partner network 192.168.77.0/24. that goes through the partner VPN box at 10.10.3.254, NOT the default gateway. everything else stays as is"
+  setup: "ip route del 192.168.77.0/24 2>/dev/null; true"
+  checks:
+    - ["ip route show 192.168.77.0/24 | grep -q 'via 10.10.3.254'", "there's no route for 192.168.77.0/24 via 10.10.3.254"]
+    - ["ip route get 192.168.77.10 | grep -q 'via 10.10.3.254'", "traffic to 192.168.77.x still doesn't go via 10.10.3.254"]
+    - ["ip route show default | grep -q 'via 10.10.3.1'", "the default route via rtr01 (10.10.3.1) is gone. that was supposed to stay!"]
+  solve: "ip route add 192.168.77.0/24 via 10.10.3.254"
+  cleanup: "ip route del 192.168.77.0/24 2>/dev/null; true"
+  hints:
+    - "You need a static route for that one network. Don't touch the default route."
+    - "`ip route add <network>/<prefix> via <gateway>`"
+    - "sudo ip route add 192.168.77.0/24 via 10.10.3.254"
+  solution: |
+    ```bash
+    sudo ip route add 192.168.77.0/24 via 10.10.3.254
+    ip route get 192.168.77.10     # verify: via 10.10.3.254
+    ```
+    To make it persist on Ubuntu, add it to netplan under `routes: [{to: 192.168.77.0/24, via: 10.10.3.254}]`.
+
+- id: d-bogus-host-route
+  skill: ip-routing
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: web01
+  title: Portal /api broken, app01 is fine
+  message: "portal /api is throwing 502s. app01 itself is healthy, I checked. tom was 'testing routes' on web01 yesterday. fix it"
+  setup: "ip route replace 10.10.3.10/32 via 10.10.2.99"
+  checks:
+    - ["! ip route show 10.10.3.10/32 | grep -q .", "web01 still has a host route for app01 (10.10.3.10/32)"]
+    - ["curl -s -m5 -o /dev/null -w '%{http_code}' http://localhost/api/health | grep -qx 200", "http://localhost/api/health on web01 still doesn't return 200"]
+    - ["ip route show default | grep -q 'via 10.10.2.1'", "web01's default route is gone"]
+  solve: "ip route del 10.10.3.10/32"
+  hints:
+    - "web01 has a route that's more specific than the default route, and it only covers app01."
+    - "Run `ip route get 10.10.3.10` on web01. Is that the router you'd expect?"
+    - "sudo ip route del 10.10.3.10/32"
+  solution: |
+    ```bash
+    ip route get 10.10.3.10        # via 10.10.2.99?? that host doesn't exist
+    ip route                       # a /32 for app01 beats the default route
+    sudo ip route del 10.10.3.10/32
+    curl -s localhost/api/health
+    ```
+    A /32 host route overrides every broader route, which makes it a classic leftover from a test.
+
+- id: d-blackholed-host
+  skill: ip-routing
+  difficulty: 2
+  persona: kofi
+  channel: platform
+  host: app01
+  title: One host unreachable from app01
+  message: "hey @dhan 🙌 one of the lab hosts (web01, jump01 or db01) is unreachable from app01, but only from app01. which one? just the hostname"
+  setup: |
+    ip route flush type blackhole 2>/dev/null
+    t=(10.10.2.10 10.10.1.10 10.10.3.20); ip route add blackhole ${t[$((RANDOM % 3))]}/32
+  expect: |
+    case $(ip route show type blackhole | awk '{print $2}' | cut -d/ -f1) in
+      10.10.2.10) echo web01;; 10.10.1.10) echo jump01;; 10.10.3.20) echo db01;;
+    esac
+  answer: exact
+  extract: "the short hostname (e.g. web01)"
+  cleanup: "ip route flush type blackhole 2>/dev/null; true"
+  hints:
+    - "Ping each one, then look at app01's routing table for anything unusual."
+    - "`ping -c1 -W1 <host>`. A route of type `blackhole` silently drops everything to that destination."
+    - "for h in web01 jump01 db01; do ping -c1 -W1 $h >/dev/null && echo \"$h ok\" || echo \"$h FAIL\"; done; ip route show type blackhole"
+  solution: |
+    ```bash
+    for h in web01 jump01 db01; do ping -c1 -W1 -q $h >/dev/null && echo "$h ok" || echo "$h FAIL"; done
+    ip route show type blackhole       # the culprit
+    ip route get 10.10.3.20            # "RTNETLINK answers: Invalid argument" = blackholed
+    sudo ip route del blackhole 10.10.3.20/32   # the fix, if asked
+    ```
+
+- id: d-set-mtu
+  skill: ip-routing
+  difficulty: 1
+  persona: leah
+  channel: netops
+  host: jump01
+  title: Lower the MTU on jump01
+  message: "@dhan the new VPN encapsulation eats 100 bytes per packet. set eth0 on jump01 to MTU 1400 pls"
+  setup: "ip link set eth0 mtu 1500"
+  checks:
+    - ["ip link show eth0 | grep -q 'mtu 1400 '", "eth0's MTU isn't 1400"]
+    - ["ip link show eth0 | grep -q 'state UP'", "eth0 is down!"]
+  solve: "ip link set eth0 mtu 1400"
+  cleanup: "ip link set eth0 mtu 1500"
+  hints:
+    - "MTU is a link (layer 2) property, so it's set with `ip link`, not `ip addr`."
+    - "`ip link set dev <iface> mtu <n>`"
+    - "sudo ip link set eth0 mtu 1400"
+  solution: |
+    ```bash
+    ip link show eth0                  # mtu 1500
+    sudo ip link set eth0 mtu 1400
+    ping -M do -s 1372 -c1 rtr01       # 1372 + 28 header bytes = 1400: OK. -s 1373 would fail
+    ```
+
+- id: d-mac-address
+  skill: ip-routing
+  difficulty: 1
+  persona: raj
+  channel: it-helpdesk
+  host: db01
+  title: MAC address for the switch audit
+  message: "hi @dhan! for the switch port audit I need db01's MAC address (the backend network interface). thanks a ton 🙏"
+  expect: "cat /sys/class/net/eth0/address"
+  answer: exact
+  extract: "the MAC address"
+  hints:
+    - "It's a property of the network interface, shown next to `link/ether`."
+    - "`ip link show eth0`, or `ip neigh` on another backend host after you ping db01."
+    - "ip -br link show eth0"
+  solution: |
+    ```bash
+    ip -br link                        # iface, state, MAC
+    cat /sys/class/net/eth0/address
+    # from a neighbour on the same subnet:
+    ping -c1 db01 >/dev/null; ip neigh show 10.10.3.20
+    ```
+
+# ---------------------------------------------------------------- dns
+
+- id: d-dig-new-record
+  skill: dns
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: ns01
+  title: What does the stage name resolve to?
+  vars:
+    W: { random: word }
+  message: "what IP is `{{W}}-stage.darkroom.internal`? need it for a config lol"
+  setup: |
+    z=/etc/bind/db.darkroom.internal; o=/var/backups/db.darkroom.internal.drill
+    [ -f $o ] || cp $z $o; cp $o $z
+    echo "$W-stage IN A 10.10.3.$((RANDOM % 100 + 100))" >> $z
+    sed -i 's/2026101501 ; serial/2026101502 ; serial/' $z; rndc reload darkroom.internal >/dev/null; sleep 1
+  expect: "dig +short $W-stage.darkroom.internal @127.0.0.1"
+  answer: exact
+  extract: "the IP address"
+  cleanup: "o=/var/backups/db.darkroom.internal.drill; [ -f $o ] && cp $o /etc/bind/db.darkroom.internal && rndc reload darkroom.internal >/dev/null; true"
+  hints:
+    - "Ask the DNS server directly. The record lives on ns01."
+    - "`dig +short <name>` prints just the answer. `@server` picks which server to ask."
+    - "dig +short {{W}}-stage.darkroom.internal"
+  solution: |
+    ```bash
+    dig +short {{W}}-stage.darkroom.internal
+    dig {{W}}-stage.darkroom.internal @ns01      # full answer: TTL, flags, which server replied
+    getent hosts {{W}}-stage.darkroom.internal   # what apps see (also checks /etc/hosts)
+    ```
+
+- id: d-cname-chase
+  skill: dns
+  difficulty: 2
+  persona: tom
+  channel: backend
+  host: ns01
+  title: Where does the alias really point?
+  vars:
+    W: { random: word }
+  message: "@dhan `{{W}}.darkroom.internal` is in our config but nobody knows which actual server it is. which host? (lab hostname)"
+  setup: |
+    z=/etc/bind/db.darkroom.internal; o=/var/backups/db.darkroom.internal.drill
+    [ -f $o ] || cp $z $o; cp $o $z
+    t=(web01 app01 db01); printf '%s IN CNAME svc-%s\nsvc-%s IN CNAME %s\n' $W $W $W ${t[$((RANDOM % 3))]} >> $z
+    sed -i 's/2026101501 ; serial/2026101502 ; serial/' $z; rndc reload darkroom.internal >/dev/null; sleep 1
+  expect: "dig +short $W.darkroom.internal @127.0.0.1 | grep -v '^[0-9]' | tail -1 | cut -d. -f1"
+  answer: exact
+  extract: "the short hostname (e.g. web01)"
+  cleanup: "o=/var/backups/db.darkroom.internal.drill; [ -f $o ] && cp $o /etc/bind/db.darkroom.internal && rndc reload darkroom.internal >/dev/null; true"
+  hints:
+    - "The name is an alias (CNAME) for another name, which might itself be an alias."
+    - "`dig +short` prints every step of the CNAME chain, then the final address."
+    - "dig +short {{W}}.darkroom.internal"
+  solution: |
+    ```bash
+    dig +short {{W}}.darkroom.internal
+    # svc-{{W}}.darkroom.internal.   <- CNAME
+    # <host>.darkroom.internal.      <- CNAME
+    # 10.10.x.y                      <- the A record at the end of the chain
+    dig +short -x 10.10.x.y          # confirm with a reverse lookup
+    ```
+
+- id: d-reverse-lookup
+  skill: dns
+  difficulty: 1
+  persona: marcus
+  channel: platform
+  host: web01
+  title: Who is that IP?
+  vars:
+    IP: { pick: [10.10.1.10, 10.10.3.10, 10.10.3.20, 10.10.3.53] }
+  message: "{{IP}} is all over web01's nginx logs this morning. which machine is that. hostname"
+  expect: "dig +short -x $IP | cut -d. -f1"
+  answer: exact
+  extract: "the short hostname"
+  hints:
+    - "That's a reverse lookup: IP to name, using a PTR record."
+    - "`dig -x <ip>` builds the in-addr.arpa query for you."
+    - "dig +short -x {{IP}}"
+  solution: |
+    ```bash
+    dig +short -x {{IP}}
+    host {{IP}}
+    getent hosts {{IP}}
+    ```
+    Reverse zones are written backwards: 10.10.3.20 is `20.3.10.10.in-addr.arpa`.
+
+- id: d-zone-typo
+  skill: dns
+  difficulty: 3
+  persona: tom
+  channel: backend
+  host: ns01
+  title: New DNS record never shows up
+  message: "@dhan I added `metrics.darkroom.internal` (→ app01, 10.10.3.10) on ns01 like an hour ago and it STILL doesn't resolve. I reloaded bind and everything ngl"
+  setup: |
+    z=/etc/bind/db.darkroom.internal; o=/var/backups/db.darkroom.internal.drill
+    [ -f $o ] || cp $z $o; cp $o $z
+    echo 'metrics IN A 10.10.3.1O' >> $z
+    sed -i 's/2026101501 ; serial/2026101502 ; serial/' $z; rndc reload darkroom.internal >/dev/null 2>&1; sleep 1
+  checks:
+    - ["dig +short metrics.darkroom.internal @127.0.0.1 | grep -qx 10.10.3.10", "metrics.darkroom.internal doesn't resolve to 10.10.3.10 yet"]
+    - ["named-checkzone darkroom.internal /etc/bind/db.darkroom.internal", "the zone file still doesn't pass named-checkzone"]
+    - ["dig +short app01.darkroom.internal @127.0.0.1 | grep -qx 10.10.3.10", "the rest of the zone broke (app01 doesn't resolve)"]
+  solve: "sed -i 's/10\\.10\\.3\\.1O/10.10.3.10/' /etc/bind/db.darkroom.internal; rndc reload darkroom.internal; sleep 1"
+  cleanup: "o=/var/backups/db.darkroom.internal.drill; [ -f $o ] && cp $o /etc/bind/db.darkroom.internal && rndc reload darkroom.internal >/dev/null; true"
+  hints:
+    - "When a reload fails, BIND keeps serving the OLD zone, so the reload can 'succeed' from Tom's point of view. Check the file itself."
+    - "`named-checkzone <zone> <file>` tells you exactly which line is wrong. `journalctl -u named` shows the reload error too."
+    - "named-checkzone darkroom.internal /etc/bind/db.darkroom.internal   then fix the line, bump the serial, sudo rndc reload"
+  solution: |
+    ```bash
+    sudo named-checkzone darkroom.internal /etc/bind/db.darkroom.internal
+    # ...: metrics IN A 10.10.3.1O: bad dotted quad   <- letter O, not zero
+    sudo vim /etc/bind/db.darkroom.internal     # fix it, and bump the serial
+    sudo rndc reload darkroom.internal
+    dig +short metrics.darkroom.internal @localhost
+    ```
+    Always run `named-checkzone` before `rndc reload`.
+
+- id: d-search-domain
+  skill: dns
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: web01
+  title: Short names stopped resolving
+  message: "on web01 `ping db01` says 'Name or service not known', but `ping db01.darkroom.internal` works. my scripts use short names. fix it"
+  setup: "printf 'nameserver 10.10.3.53\\n' > /etc/resolv.conf"
+  checks:
+    - ["getent hosts db01 | grep -q 10.10.3.20", "short name db01 still doesn't resolve on web01"]
+    - ["getent hosts app01.darkroom.internal | grep -q 10.10.3.10", "FQDNs stopped resolving on web01"]
+  solve: "printf 'nameserver 10.10.3.53\\nsearch darkroom.internal\\n' > /etc/resolv.conf"
+  cleanup: "printf 'nameserver 10.10.3.53\\nsearch darkroom.internal\\n' > /etc/resolv.conf"
+  hints:
+    - "Which file tells the resolver what domain to append to short names?"
+    - "Look at /etc/resolv.conf. Compare it with another lab host's."
+    - "add `search darkroom.internal` to /etc/resolv.conf"
+  solution: |
+    ```bash
+    cat /etc/resolv.conf                 # nameserver only, no search line
+    echo 'search darkroom.internal' | sudo tee -a /etc/resolv.conf
+    getent hosts db01
+    ```
+    `dig db01` doesn't use the search list by default (`dig +search db01` does), so test with `getent` or `ping`.
+
+- id: d-hosts-override
+  skill: dns
+  difficulty: 2
+  persona: tom
+  channel: backend
+  host: app01
+  title: DNS is right but the app disagrees
+  message: "@dhan the api on app01 says the db is down. but `dig db01.darkroom.internal` on app01 gives the right IP?? wtf"
+  setup: |
+    grep -q '10.10.3.99' /etc/hosts || echo '10.10.3.99   db01.darkroom.internal db01   # temp: db migration test' >> /etc/hosts
+  checks:
+    - ["getent hosts db01.darkroom.internal | awk '{print $1}' | grep -qx 10.10.3.20", "app01 still resolves db01.darkroom.internal to the wrong IP"]
+    - ["curl -s -m5 localhost:8080/health | grep -q '\"db\": \"up\"'", "the API's /health still reports db down"]
+    - ["grep -q localhost /etc/hosts", "/etc/hosts lost its localhost entry. only remove the bad line!"]
+  solve: "grep -v '10.10.3.99' /etc/hosts > /tmp/hosts.new; cat /tmp/hosts.new > /etc/hosts; rm -f /tmp/hosts.new"
+  cleanup: "grep -v '10.10.3.99' /etc/hosts > /tmp/hosts.new; cat /tmp/hosts.new > /etc/hosts; rm -f /tmp/hosts.new"
+  hints:
+    - "`dig` only talks to DNS. Applications use the system resolver, which checks something else first."
+    - "Compare `dig +short db01.darkroom.internal` with `getent hosts db01.darkroom.internal`. Then look at /etc/nsswitch.conf and /etc/hosts."
+    - "remove the 10.10.3.99 line from /etc/hosts (sudoedit /etc/hosts)"
+  solution: |
+    ```bash
+    dig +short db01.darkroom.internal       # 10.10.3.20 (DNS)
+    getent hosts db01.darkroom.internal     # 10.10.3.99 (what apps actually get)
+    grep hosts /etc/nsswitch.conf           # hosts: files dns  -> /etc/hosts wins
+    sudoedit /etc/hosts                     # delete the stale line
+    curl -s localhost:8080/health
+    ```
+    In containers /etc/hosts is bind-mounted, so `sed -i` fails with "Device or resource busy". Edit it in place instead (vim, or `cat new > /etc/hosts`).
+
+# ---------------------------------------------------------------- ports-sockets
+
+- id: d-port-of-process
+  skill: ports-sockets
+  difficulty: 1
+  persona: kofi
+  channel: platform
+  host: app01
+  title: Which port is the agent on?
+  message: "hey @dhan 🙌 the `metrics-agent` process on app01 listens on a TCP port nobody wrote down. which port is it?"
+  setup: |
+    pkill -x metrics-agent; pkill -x stats-relay
+    printf '#!/usr/bin/python3\nimport sys, http.server as h\nh.HTTPServer(("", int(sys.argv[1])), h.BaseHTTPRequestHandler).serve_forever()\n' > /usr/local/bin/metrics-agent
+    cp /usr/local/bin/metrics-agent /usr/local/bin/stats-relay; chmod 755 /usr/local/bin/metrics-agent /usr/local/bin/stats-relay
+    setsid -f /usr/local/bin/metrics-agent $((RANDOM % 1000 + 9000)) >/dev/null 2>&1 < /dev/null
+    setsid -f /usr/local/bin/stats-relay $((RANDOM % 1000 + 7000)) >/dev/null 2>&1 < /dev/null; sleep 0.7
+  expect: "ss -Hltnp | grep '\"metrics-agent\"' | awk '{print $4}' | awk -F: '{print $NF}'"
+  answer: number
+  extract: "the port number"
+  cleanup: "pkill -x metrics-agent; pkill -x stats-relay; rm -f /usr/local/bin/metrics-agent /usr/local/bin/stats-relay"
+  hints:
+    - "List the listening sockets along with the process that owns each one."
+    - "`ss -ltnp`: l=listening, t=tcp, n=numeric, p=process (needs sudo to see other users' processes)."
+    - "sudo ss -ltnp | grep metrics-agent"
+  solution: |
+    ```bash
+    sudo ss -ltnp | grep metrics-agent
+    sudo lsof -iTCP -sTCP:LISTEN -P -n | grep metrics
+    ```
+
+- id: d-count-connections
+  skill: ports-sockets
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: web01
+  title: Open connections to the API
+  message: "how many ESTABLISHED tcp connections does web01 have to the api (app01:8080) right now. a number"
+  setup: |
+    pkill -x keepalive-probe
+    printf '#!/usr/bin/python3\nimport socket, time\ns = socket.create_connection(("10.10.3.10", 8080))\ntime.sleep(1800)\n' > /usr/local/bin/keepalive-probe; chmod 755 /usr/local/bin/keepalive-probe
+    n=$((RANDOM % 6 + 2)); for i in $(seq $n); do setsid -f /usr/local/bin/keepalive-probe >/dev/null 2>&1 < /dev/null; done
+    for i in $(seq 50); do [ $(ss -Htn state established '( dst 10.10.3.10 and dport = :8080 )' | wc -l) -ge $n ] && break; sleep 0.1; done
+  expect: "ss -Htn state established '( dst 10.10.3.10 and dport = :8080 )' | wc -l"
+  answer: number
+  extract: "the number of connections"
+  cleanup: "pkill -x keepalive-probe; rm -f /usr/local/bin/keepalive-probe"
+  hints:
+    - "`ss` can filter by TCP state and by destination."
+    - "`ss -tn state established` plus a filter like `'( dst <ip> and dport = :<port> )'`. Count lines with -H (no header) | wc -l."
+    - "ss -Htn state established '( dst 10.10.3.10 and dport = :8080 )' | wc -l"
+  solution: |
+    ```bash
+    ss -Htn state established '( dst 10.10.3.10 and dport = :8080 )' | wc -l
+    ss -tnp state established dst 10.10.3.10     # and which processes own them (sudo)
+    ```
+
+- id: d-bind-localhost
+  skill: ports-sockets
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: app01
+  title: Internal service exposed on all interfaces
+  message: "@dhan the `inventory` service on app01 (port 9100) listens on ALL interfaces. it must only be reachable from app01 itself. fix it in the service config, not with a firewall"
+  setup: |
+    mkdir -p /srv/inventory && echo ok > /srv/inventory/index.html
+    echo 'BIND=0.0.0.0' > /etc/default/inventory
+    printf '[Unit]\nDescription=Darkroom inventory endpoint\n[Service]\nEnvironmentFile=/etc/default/inventory\nExecStart=/usr/bin/python3 -m http.server --bind ${BIND} --directory /srv/inventory 9100\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/inventory.service
+    systemctl daemon-reload; systemctl enable inventory >/dev/null 2>&1; systemctl restart inventory; sleep 1
+  checks:
+    - ["ss -Hltn 'sport = :9100' | awk '{print $4}' | grep -qx '127.0.0.1:9100'", "nothing is listening on 127.0.0.1:9100"]
+    - ["! ss -Hltn 'sport = :9100' | awk '{print $4}' | grep -vqx '127.0.0.1:9100'", "port 9100 is still listening on a non-loopback address"]
+    - ["systemctl is-active -q inventory", "the inventory service isn't running"]
+    - ["grep -q '^BIND=127.0.0.1' /etc/default/inventory || systemctl cat inventory | grep -q 'bind 127.0.0.1'", "the fix isn't in the service config (it won't survive a restart)"]
+  solve: "sed -i 's/^BIND=.*/BIND=127.0.0.1/' /etc/default/inventory; systemctl restart inventory; sleep 1"
+  cleanup: "systemctl disable --now inventory >/dev/null 2>&1; rm -f /etc/systemd/system/inventory.service /etc/default/inventory; rm -rf /srv/inventory; systemctl daemon-reload"
+  hints:
+    - "`0.0.0.0` means every interface. Find where the service gets that address from."
+    - "`systemctl cat inventory` shows the ExecStart line and its EnvironmentFile."
+    - "set BIND=127.0.0.1 in /etc/default/inventory, then sudo systemctl restart inventory"
+  solution: |
+    ```bash
+    ss -ltn 'sport = :9100'               # 0.0.0.0:9100
+    systemctl cat inventory               # EnvironmentFile=/etc/default/inventory, --bind ${BIND}
+    sudo sed -i 's/^BIND=.*/BIND=127.0.0.1/' /etc/default/inventory
+    sudo systemctl restart inventory
+    ss -ltn 'sport = :9100'               # 127.0.0.1:9100
+    ```
+
+- id: d-scan-open-ports
+  skill: ports-sockets
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: jump01
+  title: Port audit of web01
+  message: "@dhan for the audit: which TCP ports on web01 are open from the office? scan from jump01 and give me the list of port numbers"
+  setup: |
+    runuser -u dhan -- ssh -o BatchMode=yes -o ConnectTimeout=5 web01 sudo bash -s <<EOF
+    pkill -x legacy-agent
+    printf '#!/usr/bin/python3\nimport sys, http.server as h\nh.HTTPServer(("", int(sys.argv[1])), h.BaseHTTPRequestHandler).serve_forever()\n' > /usr/local/bin/legacy-agent
+    chmod 755 /usr/local/bin/legacy-agent
+    setsid -f /usr/local/bin/legacy-agent $((RANDOM % 10000 + 30000)) >/dev/null 2>&1 < /dev/null
+    sleep 0.7
+    EOF
+  expect: "nmap -Pn -n -p- -T4 --open -oG - web01 | grep -oP '\\d+(?=/open)' | sort -n"
+  answer: set
+  extract: "the list of port numbers"
+  cleanup: "runuser -u dhan -- ssh -o BatchMode=yes -o ConnectTimeout=5 web01 'sudo pkill -x legacy-agent; sudo rm -f /usr/local/bin/legacy-agent'"
+  hints:
+    - "Scan ALL TCP ports, not just the common ones. Something is listening up in the high range."
+    - "`nmap -p- <host>` scans 1-65535. `--open` hides closed ports."
+    - "nmap -p- --open web01"
+  solution: |
+    ```bash
+    nmap -p- --open web01          # all 65535 ports
+    nmap -sV -p <port> web01       # what's actually on that odd port
+    ```
+    A default `nmap web01` only checks the top 1000 ports, so it would miss the high one.
+
+# ---------------------------------------------------------------- firewall
+
+- id: d-nft-block-ip
+  skill: firewall
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: web01
+  title: Block a scanner on web01
+  message: "@dhan 10.10.1.66 is hammering web01 with a vuln scanner. block ALL traffic from that IP on web01 with nftables. nobody else should notice anything"
+  setup: |
+    nft delete table inet filter 2>/dev/null
+    runuser -u dhan -- ssh -o BatchMode=yes -o ConnectTimeout=5 jump01 'sudo ip addr del 10.10.1.66/24 dev eth0' 2>/dev/null; true
+  checks:
+    - - |
+        ! runuser -u dhan -- ssh -o BatchMode=yes -o ConnectTimeout=5 jump01 'sudo ip addr add 10.10.1.66/24 dev eth0 2>/dev/null; curl -s -m3 -o /dev/null --interface 10.10.1.66 http://web01.darkroom.internal/; rc=$?; sudo ip addr del 10.10.1.66/24 dev eth0; exit $rc'
+      - "a client at 10.10.1.66 can still reach web01"
+    - ["runuser -u dhan -- ssh -o BatchMode=yes -o ConnectTimeout=5 jump01 'curl -s -m3 -o /dev/null http://web01.darkroom.internal/'", "the rest of the office (jump01) can't reach web01 anymore, or can't SSH to it"]
+    - ["curl -s -m5 -o /dev/null -w '%{http_code}' http://localhost/api/health | grep -qx 200", "web01's own /api/health broke"]
+  solve: |
+    nft add table inet filter
+    nft add chain inet filter input '{ type filter hook input priority 0; policy accept; }'
+    nft add rule inet filter input ip saddr 10.10.1.66 drop
+  cleanup: |
+    nft delete table inet filter 2>/dev/null
+    runuser -u dhan -- ssh -o BatchMode=yes -o ConnectTimeout=5 jump01 'sudo ip addr del 10.10.1.66/24 dev eth0' 2>/dev/null; true
+  hints:
+    - "You need a table, an input chain hooked into the kernel (with policy accept, so everyone else gets in), and one drop rule."
+    - "`nft add table inet filter`, `nft add chain inet filter input '{ type filter hook input priority 0; policy accept; }'`, then `nft add rule ... ip saddr <ip> drop`."
+    - "sudo nft add rule inet filter input ip saddr 10.10.1.66 drop   (after creating the table + chain)"
+  solution: |
+    ```bash
+    sudo nft add table inet filter
+    sudo nft add chain inet filter input '{ type filter hook input priority 0; policy accept; }'
+    sudo nft add rule inet filter input ip saddr 10.10.1.66 counter drop
+    sudo nft list ruleset          # the counter shows hits
+    ```
+    `drop` silently discards packets, and `reject` sends back an error. For scanners, drop is usual. This rule is runtime only (see d-nft-persist).
+
+- id: d-nft-persist
+  skill: firewall
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: web01
+  title: Make the firewall block survive reboot
+  message: "@dhan I blocked 10.10.1.66 on web01 by hand this morning with nft. make sure that block survives a reboot pls"
+  setup: |
+    [ -f /var/backups/nftables.conf.drill ] || cp /etc/nftables.conf /var/backups/nftables.conf.drill
+    cp /var/backups/nftables.conf.drill /etc/nftables.conf; systemctl disable nftables >/dev/null 2>&1
+    nft delete table inet filter 2>/dev/null
+    nft add table inet filter; nft add chain inet filter input '{ type filter hook input priority 0; policy accept; }'
+    nft add rule inet filter input ip saddr 10.10.1.66 drop
+  checks:
+    - ["grep -q '10.10.1.66' /etc/nftables.conf", "/etc/nftables.conf doesn't contain the block, so it's lost on reboot"]
+    - ["nft -c -f /etc/nftables.conf", "/etc/nftables.conf doesn't parse (nft -c -f)"]
+    - ["systemctl is-enabled -q nftables", "nftables.service isn't enabled, so the file is never loaded at boot"]
+    - ["nft -f /etc/nftables.conf && nft list ruleset | grep -q 'ip saddr 10.10.1.66'", "loading /etc/nftables.conf doesn't produce the 10.10.1.66 rule"]
+    - ["curl -s -m5 -o /dev/null -w '%{http_code}' http://localhost/api/health | grep -qx 200", "after loading /etc/nftables.conf, web01's /api/health broke"]
+  solve: |
+    { echo '#!/usr/sbin/nft -f'; echo 'flush ruleset'; nft list table inet filter; } > /etc/nftables.conf
+    systemctl enable nftables >/dev/null 2>&1
+  cleanup: |
+    nft delete table inet filter 2>/dev/null
+    [ -f /var/backups/nftables.conf.drill ] && cp /var/backups/nftables.conf.drill /etc/nftables.conf
+    systemctl disable nftables >/dev/null 2>&1; true
+  hints:
+    - "Rules added with `nft add` live only in the kernel. At boot, nftables.service loads them from a file."
+    - "Dump the live table into /etc/nftables.conf (keep a `flush ruleset` at the top), check it with `nft -c -f`, then enable the service."
+    - "{ echo 'flush ruleset'; sudo nft list table inet filter; } | sudo tee /etc/nftables.conf; sudo systemctl enable nftables"
+  solution: |
+    ```bash
+    sudo nft list ruleset                               # what's live now
+    { echo '#!/usr/sbin/nft -f'; echo 'flush ruleset'; sudo nft list table inet filter; } | sudo tee /etc/nftables.conf
+    sudo nft -c -f /etc/nftables.conf                   # syntax check, doesn't apply
+    sudo systemctl enable nftables
+    ```
+    `flush ruleset` at the top makes reloading the file idempotent: no duplicate rules.
+
+- id: d-db-firewall
+  skill: firewall
+  difficulty: 3
+  persona: leah
+  channel: netops
+  host: db01
+  title: Hardening broke postgres
+  message: "@dhan my bad 😬 after my hardening on db01 the API can't reach postgres. open 5432 for the backend subnet 10.10.3.0/24 ONLY (office must stay blocked), keep policy drop, and make it persistent"
+  setup: |
+    [ -f /var/backups/nftables.conf.drill ] || cp /etc/nftables.conf /var/backups/nftables.conf.drill
+    cat > /etc/nftables.conf <<'NFT'
+    #!/usr/sbin/nft -f
+    flush ruleset
+    table inet filter {
+      chain input {
+        type filter hook input priority 0; policy drop;
+        iif lo accept
+        ct state established,related accept
+        ip protocol icmp accept
+        tcp dport 22 accept
+      }
+    }
+    NFT
+    nft -f /etc/nftables.conf; systemctl enable nftables >/dev/null 2>&1
+  checks:
+    - ["runuser -u dhan -- ssh -o BatchMode=yes -o ConnectTimeout=5 app01 'timeout 3 bash -c \"</dev/tcp/10.10.3.20/5432\"'", "app01 still can't connect to db01:5432"]
+    - ["! runuser -u dhan -- ssh -o BatchMode=yes -o ConnectTimeout=5 jump01 'timeout 3 bash -c \"</dev/tcp/10.10.3.20/5432\"'", "the office (jump01) can reach postgres now. backend only!"]
+    - ["nft list chain inet filter input | grep -q 'policy drop'", "the input policy isn't drop anymore"]
+    - ["nft -c -f /etc/nftables.conf && grep -q 5432 /etc/nftables.conf && systemctl is-enabled -q nftables", "the live rule isn't in /etc/nftables.conf (or nftables isn't enabled), so it won't survive a reboot"]
+  solve: |
+    sed -i 's|^\(\s*\)tcp dport 22 accept|&\n\1ip saddr 10.10.3.0/24 tcp dport 5432 accept|' /etc/nftables.conf
+    nft -f /etc/nftables.conf
+  cleanup: |
+    nft delete table inet filter 2>/dev/null
+    [ -f /var/backups/nftables.conf.drill ] && cp /var/backups/nftables.conf.drill /etc/nftables.conf
+    systemctl disable nftables >/dev/null 2>&1; true
+  hints:
+    - "The rule needs to match both the source subnet and the destination port. Put it in the file, then load the file."
+    - "In /etc/nftables.conf's input chain: `ip saddr <subnet> tcp dport <port> accept`. Then `nft -c -f` and `nft -f`."
+    - "add `ip saddr 10.10.3.0/24 tcp dport 5432 accept` to the input chain in /etc/nftables.conf, then sudo nft -f /etc/nftables.conf"
+  solution: |
+    ```bash
+    sudo nft list ruleset                           # policy drop, only 22 open
+    sudoedit /etc/nftables.conf                     # add to chain input:
+    #   ip saddr 10.10.3.0/24 tcp dport 5432 accept
+    sudo nft -c -f /etc/nftables.conf && sudo nft -f /etc/nftables.conf
+    # from app01:  pg_isready -h db01      -> accepting connections
+    # from jump01: nc -zv -w3 db01 5432    -> timeout
+    ```
+    Editing the file and loading it keeps the live rules and the boot config identical.
+
+- id: d-which-port-blocked
+  skill: firewall
+  difficulty: 2
+  persona: leah
+  channel: netops
+  host: rtr01
+  title: Which port is the router blocking?
+  message: "@dhan someone added a forward rule on rtr01 that blocks one TCP port from the office (10.10.1.0/24) to the dmz (10.10.2.0/24). which port? I want to know before I yell at anyone 🙃"
+  setup: |
+    nft -f /etc/nftables.conf
+    p=(8443 3000 9200 6379 2049 5601 8000 25); i=$((RANDOM % 8)); j=$(((i + 3) % 8)); k=$(((i + 5) % 8))
+    nft add rule inet filter forward ip saddr 10.10.2.0/24 ip daddr 10.10.1.0/24 tcp dport ${p[$j]} drop
+    nft add rule inet filter forward ip saddr 10.10.1.0/24 ip daddr 10.10.2.0/24 tcp dport ${p[$i]} drop
+    nft add rule inet filter forward ip saddr 10.10.1.0/24 ip daddr 10.10.3.0/24 tcp dport ${p[$k]} drop
+  expect: "nft list chain inet filter forward | grep 'ip saddr 10.10.1.0/24 ip daddr 10.10.2.0/24' | grep -oP 'dport \\K\\d+'"
+  answer: number
+  extract: "the port number"
+  cleanup: "nft -f /etc/nftables.conf"
+  hints:
+    - "Read the live forward chain on rtr01. Mind the direction: source office, destination dmz."
+    - "`nft list chain inet filter forward`. Add `-a` to see rule handles if you want to delete one."
+    - "sudo nft list chain inet filter forward | grep 'saddr 10.10.1.0/24 ip daddr 10.10.2.0/24'"
+  solution: |
+    ```bash
+    sudo nft -a list chain inet filter forward
+    # ip saddr 10.10.1.0/24 ip daddr 10.10.2.0/24 tcp dport <PORT> drop   # handle N
+    sudo nft delete rule inet filter forward handle N    # if you were asked to remove it
+    ```
+    The other two rules are decoys: one is the reverse direction and one goes to the backend.
+
+# ---------------------------------------------------------------- packet-capture
+
+- id: d-pcap-port80
+  skill: packet-capture
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: web01
+  title: Capture HTTP traffic to a file
+  message: "grab me a packet capture of HTTP (tcp port 80) traffic on web01 in /var/tmp/web80.pcap. only port 80 in it, and it better actually contain packets"
+  setup: "rm -f /var/tmp/web80.pcap"
+  checks:
+    - ["[ -s /var/tmp/web80.pcap ]", "/var/tmp/web80.pcap doesn't exist or is empty"]
+    - ["[ $(tcpdump -nr /var/tmp/web80.pcap 'tcp port 80' 2>/dev/null | wc -l) -gt 0 ]", "the pcap has no port-80 packets in it"]
+    - ["[ $(tcpdump -nr /var/tmp/web80.pcap 'not tcp port 80' 2>/dev/null | wc -l) -eq 0 ]", "the pcap contains non-port-80 traffic. use a capture filter"]
+  solve: |
+    timeout 4 tcpdump -i any -w /var/tmp/web80.pcap 'tcp port 80' >/dev/null 2>&1 & sleep 1.5
+    for i in 1 2 3; do curl -s -o /dev/null http://localhost/; done; wait
+  cleanup: "rm -f /var/tmp/web80.pcap"
+  hints:
+    - "tcpdump can write raw packets to a file, and takes a filter expression that decides what's captured."
+    - "`tcpdump -i any -w <file> 'tcp port 80'`. Generate some traffic in another terminal (curl), then Ctrl-C."
+    - "sudo tcpdump -i any -w /var/tmp/web80.pcap 'tcp port 80'   (+ curl localhost in another shell)"
+  solution: |
+    ```bash
+    sudo tcpdump -i any -w /var/tmp/web80.pcap 'tcp port 80'
+    # other terminal:  curl -s localhost >/dev/null   (a few times), then Ctrl-C the capture
+    tcpdump -nr /var/tmp/web80.pcap | head        # read it back
+    ```
+    `-i any` includes loopback, which is where your local curl traffic goes.
+
+- id: d-dns-sniff
+  skill: packet-capture
+  difficulty: 2
+  persona: leah
+  channel: netops
+  host: ns01
+  title: Mystery DNS queries
+  vars:
+    W: { random: word }
+  message: "@dhan something on the backend net keeps asking ns01 for a name that doesn't exist, every couple of seconds. what name is it asking for? (+ bonus points: which IP is asking)"
+  setup: |
+    n="$W-$((RANDOM % 900 + 100)).darkroom.internal"
+    runuser -u dhan -- ssh -o BatchMode=yes -o ConnectTimeout=5 db01 sudo bash -s <<EOF
+    pkill -x cache-warmer
+    printf '#!/bin/bash\nwhile :; do dig +short +tries=1 +time=1 @10.10.3.53 %s >/dev/null; sleep 2; done\n' '$n' > /usr/local/bin/cache-warmer
+    chmod 755 /usr/local/bin/cache-warmer
+    setsid -f /usr/local/bin/cache-warmer >/dev/null 2>&1 < /dev/null
+    EOF
+    sleep 1
+  expect: "timeout 8 tcpdump -lni any -c1 'udp dst port 53 and src host 10.10.3.20' 2>/dev/null | grep -oP 'A\\? \\K\\S+' | sed 's/\\.$//'"
+  answer: exact
+  extract: "the DNS name being queried (no trailing dot)"
+  cleanup: "runuser -u dhan -- ssh -o BatchMode=yes -o ConnectTimeout=5 db01 'sudo pkill -x cache-warmer; sudo rm -f /usr/local/bin/cache-warmer'"
+  hints:
+    - "Watch the DNS traffic arriving at ns01."
+    - "`tcpdump -n -i any port 53`. The query name appears after `A?`."
+    - "sudo tcpdump -ni any udp port 53"
+  solution: |
+    ```bash
+    sudo tcpdump -ni any 'udp dst port 53'
+    # 10.10.3.20.41234 > 10.10.3.53.53: 1234+ A? <name>. (..)
+    dig +short -x 10.10.3.20      # who's asking: db01
+    ```
+    Another way: `sudo rndc querylog on` and then `journalctl -u named -f`.
+
+# ---------------------------------------------------------------- tls
+
+- id: d-cert-days-left
+  skill: tls
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: web01
+  title: When does the cert expire?
+  message: "@dhan how many days until the certificate served on web01:443 expires? for the renewal tracker"
+  setup: |
+    s=/etc/nginx/ssl; [ -f /var/backups/darkroom.crt.drill ] || { cp $s/darkroom.crt /var/backups/darkroom.crt.drill; cp $s/darkroom.key /var/backups/darkroom.key.drill; }
+    openssl req -x509 -newkey rsa:2048 -nodes -days $((RANDOM % 110 + 10)) -subj /CN=web01.darkroom.internal -keyout $s/darkroom.key -out $s/darkroom.crt 2>/dev/null
+    systemctl reload nginx; sleep 1
+  expect: |
+    end=$(echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -enddate | cut -d= -f2)
+    echo $(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))
+  answer: number
+  tolerance: 1
+  extract: "the number of days"
+  cleanup: |
+    s=/etc/nginx/ssl; [ -f /var/backups/darkroom.crt.drill ] && { cp /var/backups/darkroom.crt.drill $s/darkroom.crt; cp /var/backups/darkroom.key.drill $s/darkroom.key; systemctl reload nginx; }; true
+  hints:
+    - "Look at the certificate the server actually serves, not just a file on disk."
+    - "`openssl s_client -connect host:443` fetches it. Pipe that into `openssl x509 -noout -enddate`."
+    - "echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -enddate"
+  solution: |
+    ```bash
+    echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -dates
+    end=$(echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -enddate | cut -d= -f2)
+    echo $(( ($(date -d "$end" +%s) - $(date +%s)) / 86400 ))     # days left
+    openssl x509 -checkend $((30*86400)) -noout -in /etc/nginx/ssl/darkroom.crt   # "will it expire within 30d?"
+    ```
+
+- id: d-cert-sans
+  skill: tls
+  difficulty: 2
+  persona: priya
+  channel: platform
+  host: web01
+  title: Which names does the cert cover?
+  vars:
+    A: { random: word }
+  message: "hi @dhan! the client asked which hostnames our web01 certificate is valid for 😅 can you list them? 🙏"
+  setup: |
+    s=/etc/nginx/ssl; [ -f /var/backups/darkroom.crt.drill ] || { cp $s/darkroom.crt /var/backups/darkroom.crt.drill; cp $s/darkroom.key /var/backups/darkroom.key.drill; }
+    w=(portal shop status docs); b=${w[$((RANDOM % 4))]}
+    openssl req -x509 -newkey rsa:2048 -nodes -days 90 -subj /CN=web01.darkroom.internal \
+      -addext "subjectAltName=DNS:web01.darkroom.internal,DNS:$A.darkroom.internal,DNS:$b.darkroom.internal" \
+      -keyout $s/darkroom.key -out $s/darkroom.crt 2>/dev/null
+    systemctl reload nginx; sleep 1
+  expect: "echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -ext subjectAltName | grep -oP 'DNS:\\K[^,\\s]+'"
+  answer: set
+  extract: "the list of hostnames"
+  cleanup: |
+    s=/etc/nginx/ssl; [ -f /var/backups/darkroom.crt.drill ] && { cp /var/backups/darkroom.crt.drill $s/darkroom.crt; cp /var/backups/darkroom.key.drill $s/darkroom.key; systemctl reload nginx; }; true
+  hints:
+    - "Browsers ignore the CN. The valid names are in the Subject Alternative Name (SAN) extension."
+    - "Fetch the served cert with `openssl s_client`, then use `openssl x509 -noout -ext subjectAltName`."
+    - "echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -ext subjectAltName"
+  solution: |
+    ```bash
+    echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -ext subjectAltName
+    # or the full dump:  ... | openssl x509 -noout -text | grep -A1 'Alternative Name'
+    ```
+
+- id: d-cert-key-mismatch
+  skill: tls
+  difficulty: 3
+  persona: marcus
+  channel: platform
+  host: web01
+  title: nginx down after a cert "renewal"
+  message: "portal is down. nginx on web01 won't start since someone 'renewed' the cert this morning. fix it. a fresh self-signed cert for web01.darkroom.internal is fine for now"
+  setup: |
+    s=/etc/nginx/ssl; [ -f /var/backups/darkroom.crt.drill ] || { cp $s/darkroom.crt /var/backups/darkroom.crt.drill; cp $s/darkroom.key /var/backups/darkroom.key.drill; }
+    cp /var/backups/darkroom.crt.drill $s/darkroom.crt; openssl genrsa -out $s/darkroom.key 2048 2>/dev/null
+    systemctl restart nginx 2>/dev/null; true
+  checks:
+    - ["systemctl is-active -q nginx", "nginx isn't running"]
+    - ["curl -sk -m5 -o /dev/null https://localhost/", "https://localhost/ on web01 doesn't answer"]
+    - ["[ \"$(openssl x509 -noout -pubkey -in /etc/nginx/ssl/darkroom.crt | sha256sum)\" = \"$(openssl pkey -pubout -in /etc/nginx/ssl/darkroom.key | sha256sum)\" ]", "darkroom.crt and darkroom.key still don't match"]
+  solve: |
+    s=/etc/nginx/ssl
+    openssl req -x509 -new -key $s/darkroom.key -days 365 -subj /CN=web01.darkroom.internal -out $s/darkroom.crt 2>/dev/null
+    systemctl restart nginx; sleep 1
+  cleanup: |
+    s=/etc/nginx/ssl; [ -f /var/backups/darkroom.crt.drill ] && { cp /var/backups/darkroom.crt.drill $s/darkroom.crt; cp /var/backups/darkroom.key.drill $s/darkroom.key; systemctl restart nginx; }; true
+  hints:
+    - "`nginx -t` or the journal will tell you why it won't start."
+    - "\"key values mismatch\" means the certificate's public key isn't the private key's. Compare `openssl x509 -pubkey` with `openssl pkey -pubout`."
+    - "sudo openssl req -x509 -new -key /etc/nginx/ssl/darkroom.key -days 365 -subj /CN=web01.darkroom.internal -out /etc/nginx/ssl/darkroom.crt && sudo systemctl restart nginx"
+  solution: |
+    ```bash
+    sudo nginx -t        # SSL_CTX_use_PrivateKey ... key values mismatch
+    diff <(sudo openssl x509 -noout -pubkey -in /etc/nginx/ssl/darkroom.crt) \
+         <(sudo openssl pkey -pubout -in /etc/nginx/ssl/darkroom.key)     # differ
+    # new self-signed cert for the EXISTING key:
+    sudo openssl req -x509 -new -key /etc/nginx/ssl/darkroom.key -days 365 \
+         -subj /CN=web01.darkroom.internal -out /etc/nginx/ssl/darkroom.crt
+    sudo nginx -t && sudo systemctl restart nginx
+    ```

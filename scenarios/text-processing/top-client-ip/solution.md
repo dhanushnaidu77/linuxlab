@@ -1,7 +1,7 @@
 ## Fix
 ```bash
 ssh web01
-awk '{print $1}' /var/log/nginx/kestrel.access.log | sort | uniq -c | sort -rn | head
+awk '{print $1}' /var/log/nginx/darkroom.access.log | sort | uniq -c | sort -rn | head
 ```
 - `awk '{print $1}'` — first whitespace-separated field (client IP in nginx's combined format)
 - `sort | uniq -c` — `uniq` only collapses *adjacent* duplicates, so sort first

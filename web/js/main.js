@@ -122,7 +122,7 @@ function renderSidebar() {
 
   renderSessions();
   const totalUnread = [...s.channels.map((c) => c.id), ...dms].reduce((n, c) => n + unreadCount(c), 0);
-  document.title = totalUnread ? `(${totalUnread}) Kestrel Console` : 'Kestrel Console';
+  document.title = totalUnread ? `(${totalUnread}) Darkroom Console` : 'Darkroom Console';
 }
 
 function channelItem(id, label) {
@@ -338,6 +338,16 @@ $('btn-reset').onclick = () => {
   const host = $('reset-host').value;
   if (confirm(`Reset ${host || 'the whole lab'}? Open tickets will be cancelled.`)) labAction('/api/lab/reset', { host: host || null }, `Reset ${host || 'lab'}`);
 };
+$('btn-reset-all').onclick = async () => {
+  if (!confirm('Reset EVERYTHING? All chat history, tickets, XP, mastery and your streak are deleted, and the lab is rebuilt. This cannot be undone.')) return;
+  $('lab-msg').textContent = 'Resetting everything… (about a minute)';
+  await guarded(async () => {
+    const r = await api('/api/reset-all', {});
+    if (!r.ok) { $('lab-msg').textContent = `Lab reset failed: ${r.error}`; return; }
+    try { localStorage.clear(); } catch {}
+    location.reload();
+  });
+};
 $('btn-start').onclick = () => labAction('/api/lab/start', {}, 'Start lab');
 $('btn-logout').onclick = async () => { await api('/api/logout', {}); location.reload(); };
 
@@ -366,6 +376,8 @@ function onEvent(e) {
     ui.typing = e;
     if (e.taskId === ui.threadId) renderThread();
     setTimeout(() => { if (ui.typing === e) { ui.typing = null; renderThread(); } }, 20000);
+  } else if (e.type === 'reset') {
+    location.reload();
   } else if (e.type === 'progress' || e.type === 'lab') {
     guarded(refreshState);
   }

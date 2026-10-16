@@ -1,5 +1,5 @@
 [Unit]
-Description=Seed kestrel database
+Description=Seed darkroom database
 After=postgresql.service
 Requires=postgresql.service
 

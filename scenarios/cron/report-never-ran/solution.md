@@ -9,7 +9,7 @@ journalctl -u cron --since today          # "(*system*nightly-report) WRONG FILE
 ## Fix
 ```bash
 sudo chmod 644 /etc/cron.d/nightly-report      # cron ignores group/world-writable files
-sudo -u kestrel /opt/kestrel/nightly-report.sh # run today's report as the right user
+sudo -u darkroom /opt/darkroom/nightly-report.sh # run today's report as the right user
 ls -l /srv/reports/
 ```
 

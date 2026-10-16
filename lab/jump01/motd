@@ -1,4 +1,4 @@
 
-  Kestrel Labs :: jump01 (office-net 10.10.1.10)
+  Darkroom Labs :: jump01 (office-net 10.10.1.10)
   Hosts: rtr01 web01 app01 db01 ns01   (ssh <host> — key auth, sudo available)
 

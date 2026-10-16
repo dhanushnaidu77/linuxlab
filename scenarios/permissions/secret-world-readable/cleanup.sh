@@ -1,1 +1,1 @@
-on app01 'rm -f /etc/kestrel/db.secret'
+on app01 'rm -f /etc/darkroom/db.secret'

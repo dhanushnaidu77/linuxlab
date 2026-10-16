@@ -7,12 +7,12 @@ persona: tom
 targets: [app01]
 vars: {}
 message: |
-  @dhan so I tweaked the kestrel-api service file on app01 to add an env var and now it won't start at all 🙃
+  @dhan so I tweaked the darkroom-api service file on app01 to add an env var and now it won't start at all 🙃
   it says something about exit code 203?? I restarted it like 5 times lol
 secret_context: |
-  Tom edited /etc/systemd/system/kestrel-api.service: ExecStart now says /usr/bin/pyhton3 (typo) → status=203/EXEC.
-  He added Environment=KESTREL_ENV=prod which should stay. After fixing the file a `systemctl daemon-reload` is required.
+  Tom edited /etc/systemd/system/darkroom-api.service: ExecStart now says /usr/bin/pyhton3 (typo) → status=203/EXEC.
+  He added Environment=DARKROOM_ENV=prod which should stay. After fixing the file a `systemctl daemon-reload` is required.
 hints:
   - "Exit status 203 means systemd couldn't execute the program in ExecStart. Look at the unit file."
-  - "`systemctl cat kestrel-api` shows the unit; after editing it, systemd needs `daemon-reload` before restart."
-  - "sudo sed -i 's/pyhton3/python3/' /etc/systemd/system/kestrel-api.service && sudo systemctl daemon-reload && sudo systemctl restart kestrel-api"
+  - "`systemctl cat darkroom-api` shows the unit; after editing it, systemd needs `daemon-reload` before restart."
+  - "sudo sed -i 's/pyhton3/python3/' /etc/systemd/system/darkroom-api.service && sudo systemctl daemon-reload && sudo systemctl restart darkroom-api"

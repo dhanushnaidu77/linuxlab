@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kestrel Console</title>
+  <title>Darkroom Console</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐧</text></svg>">
   <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
   <link rel="stylesheet" href="/app.css">
@@ -12,7 +12,7 @@
   <!-- login -->
   <div id="login" class="login hidden">
     <form id="login-form" class="login-card">
-      <div class="login-brand">🐧 Kestrel Labs</div>
+      <div class="login-brand">🐧 Darkroom Labs</div>
       <p class="muted">Ops console — sign in</p>
       <input id="login-pw" type="password" placeholder="Password" autocomplete="current-password" autofocus>
       <button type="submit" class="btn primary">Sign in</button>
@@ -23,7 +23,7 @@
   <!-- app -->
   <div id="app" class="app hidden">
     <header class="topbar">
-      <div class="brand">🐧 Kestrel Labs <span class="muted">console</span></div>
+      <div class="brand">🐧 Darkroom Labs <span class="muted">console</span></div>
       <div class="status">
         <span id="lab-status" class="pill" title="Lab containers">lab …</span>
         <span id="persona-status" class="pill" title="Persona replies"></span>
@@ -133,6 +133,12 @@
       </div>
       <p class="muted small">Reset recreates containers from their images and cancels open tickets (no penalty).</p>
       <p id="lab-msg" class="small"></p>
+      <hr>
+      <h3>Start over</h3>
+      <div class="row">
+        <button type="button" id="btn-reset-all" class="btn danger small">Reset everything</button>
+        <span class="muted small">Wipes chat, tickets, XP, mastery and streak, and rebuilds the lab. Settings are kept.</span>
+      </div>
       <hr>
       <div class="row spread">
         <button type="button" id="btn-logout" class="btn ghost small">Log out</button>

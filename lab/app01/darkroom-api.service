@@ -1,10 +1,10 @@
 [Unit]
-Description=Kestrel internal API
+Description=Darkroom internal API
 After=network.target lab-net.service
 
 [Service]
-User=kestrel
-ExecStart=/usr/bin/python3 /opt/kestrel/kestrel-api.py
+User=darkroom
+ExecStart=/usr/bin/python3 /opt/darkroom/darkroom-api.py
 Restart=on-failure
 RestartSec=3
 

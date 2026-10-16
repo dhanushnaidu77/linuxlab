@@ -9,10 +9,10 @@ vars:
   PROC: { pick: [report-gen, etl-worker, img-resize, pdf-render] }
 message: |
   @dhan app01 load is through the roof and everything on it is slow. find whatever is spinning the CPU and kill it.
-  do NOT reboot the box, kestrel-api has to stay up.
+  do NOT reboot the box, darkroom-api has to stay up.
 secret_context: |
   A process named {{PROC}} (a stuck batch job, started by a script in /usr/local/bin) is burning 100% CPU in an infinite loop.
-  Marcus doesn't know its name, only that "something batch-y" started an hour ago. kestrel-api must remain running.
+  Marcus doesn't know its name, only that "something batch-y" started an hour ago. darkroom-api must remain running.
 hints:
   - "Which tool shows live per-process CPU usage?"
   - "Run `top` (press P to sort by CPU) or `ps aux --sort=-%cpu | head`. Note the PID, then send it a signal."

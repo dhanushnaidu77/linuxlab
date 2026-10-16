@@ -4,15 +4,15 @@
 ## Fix
 ```bash
 ssh app01
-systemctl status kestrel-api                   # 203/EXEC
-journalctl -u kestrel-api -n 20                # "Failed to locate executable /usr/bin/pyhton3"
-systemctl cat kestrel-api
-sudo systemctl edit --full kestrel-api         # or fix with sed/vim
+systemctl status darkroom-api                   # 203/EXEC
+journalctl -u darkroom-api -n 20                # "Failed to locate executable /usr/bin/pyhton3"
+systemctl cat darkroom-api
+sudo systemctl edit --full darkroom-api         # or fix with sed/vim
 sudo systemctl daemon-reload                   # required after editing unit files
-sudo systemctl restart kestrel-api
+sudo systemctl restart darkroom-api
 ```
 
 ## Notes
-- Prefer `systemctl edit kestrel-api` (drop-in override in `/etc/systemd/system/kestrel-api.service.d/`) for small changes like
+- Prefer `systemctl edit darkroom-api` (drop-in override in `/etc/systemd/system/darkroom-api.service.d/`) for small changes like
   adding `Environment=` — it survives package upgrades of the main unit.
 - Common exit codes: 203 = EXEC (binary not found/not executable), 217 = USER (User= doesn't exist), 200 = CHDIR.

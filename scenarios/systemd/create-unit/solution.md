@@ -2,12 +2,12 @@
 ```ini
 # /etc/systemd/system/metrics-exporter.service
 [Unit]
-Description=Kestrel metrics exporter
+Description=Darkroom metrics exporter
 After=network.target
 
 [Service]
-User=kestrel
-ExecStart=/usr/bin/python3 /opt/kestrel/metrics-exporter.py
+User=darkroom
+ExecStart=/usr/bin/python3 /opt/darkroom/metrics-exporter.py
 Restart=on-failure
 
 [Install]

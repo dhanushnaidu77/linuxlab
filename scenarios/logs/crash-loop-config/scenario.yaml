@@ -9,11 +9,11 @@ targets: [app01]
 vars:
   BAD: { pick: [eighty, "80 80", "8080x", "port"] }
 message: |
-  [FIRING] KestrelApiDown — app01 kestrel-api has restarted 14 times in 10m. @dhan (primary on-call)
+  [FIRING] DarkroomApiDown — app01 darkroom-api has restarted 14 times in 10m. @dhan (primary on-call)
 secret_context: |
-  /etc/kestrel/api.conf has "port = {{BAD}}" (someone's bad edit). The service logs "FATAL: bad config: invalid literal for int()"
+  /etc/darkroom/api.conf has "port = {{BAD}}" (someone's bad edit). The service logs "FATAL: bad config: invalid literal for int()"
   to journald and exits; systemd restarts it every 3s. Fix: set port = 8080. AlertManager only speaks in status lines.
 hints:
   - "When a service keeps restarting, its own logs usually say why. systemd keeps them in the journal."
-  - "`journalctl -u kestrel-api -n 30` (or `-f` to follow). Then look at the file the error mentions."
-  - "Edit /etc/kestrel/api.conf: in the [server] section set `port = 8080` (leave the [database] port alone!), then: sudo systemctl restart kestrel-api"
+  - "`journalctl -u darkroom-api -n 30` (or `-f` to follow). Then look at the file the error mentions."
+  - "Edit /etc/darkroom/api.conf: in the [server] section set `port = 8080` (leave the [database] port alone!), then: sudo systemctl restart darkroom-api"

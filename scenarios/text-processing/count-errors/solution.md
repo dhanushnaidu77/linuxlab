@@ -1,7 +1,7 @@
 ## Fix
 ```bash
 ssh app01
-grep -c ' ERROR ' /var/log/kestrel/api.log
+grep -c ' ERROR ' /var/log/darkroom/api.log
 ```
 `grep -c` counts matching **lines**. Matching `' ERROR '` (with spaces, uppercase) avoids counting INFO lines
 like "retrying after error".

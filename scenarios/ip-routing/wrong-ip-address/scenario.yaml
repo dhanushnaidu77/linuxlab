@@ -8,7 +8,7 @@ targets: [web01]
 vars:
   NEWIP: { pick: [10.10.2.11, 10.10.2.37, 10.10.2.99, 10.10.2.142] }
 message: |
-  @dhan someone was testing an IP change on web01 by hand and now web01.kestrel.internal (10.10.2.10) doesn't answer at all.
+  @dhan someone was testing an IP change on web01 by hand and now web01.darkroom.internal (10.10.2.10) doesn't answer at all.
   DNS is correct, so put the box back on its proper address please. I don't know what IP they moved it to 🙄
 secret_context: |
   web01's eth0 address was changed from 10.10.2.10/24 to {{NEWIP}}/24 (and the default route re-added via 10.10.2.1).

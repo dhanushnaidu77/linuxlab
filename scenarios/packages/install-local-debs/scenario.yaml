@@ -1,5 +1,5 @@
 id: install-local-debs
-title: Install kestrel-cli from local .debs
+title: Install darkroom-cli from local .debs
 skills: [packages]
 difficulty: 2
 channel: backend
@@ -8,13 +8,13 @@ targets: [app01]
 vars:
   VER: { pick: ["1.4.2", "1.5.0", "2.0.1"] }
 message: |
-  @dhan can you install kestrel-cli on app01? the .deb is in /var/cache/kestrel/ (no internet on that box).
+  @dhan can you install darkroom-cli on app01? the .deb is in /var/cache/darkroom/ (no internet on that box).
   I tried `dpkg -i` and it yelled at me about dependencies 🤷
 secret_context: |
-  /var/cache/kestrel/ contains kestrel-cli_{{VER}}_all.deb which Depends on kestrel-common, also present as a .deb in the same
+  /var/cache/darkroom/ contains darkroom-cli_{{VER}}_all.deb which Depends on darkroom-common, also present as a .deb in the same
   directory. dpkg -i of only the cli fails with unmet dependencies and leaves it half-configured. Installing both together
-  (dpkg -i *.deb, or apt install ./a.deb ./b.deb) works. `kestrel-cli --version` must print {{VER}}.
+  (dpkg -i *.deb, or apt install ./a.deb ./b.deb) works. `darkroom-cli --version` must print {{VER}}.
 hints:
-  - "Read the dpkg error carefully: what does kestrel-cli depend on, and is it available locally?"
+  - "Read the dpkg error carefully: what does darkroom-cli depend on, and is it available locally?"
   - "`dpkg -I <file.deb>` shows a package's metadata (Depends:). You can give dpkg several .deb files at once."
-  - "sudo dpkg -i /var/cache/kestrel/*.deb && kestrel-cli --version"
+  - "sudo dpkg -i /var/cache/darkroom/*.deb && darkroom-cli --version"

@@ -1,1 +1,1 @@
-on app01 'crontab -r -u kestrel 2>/dev/null; true'
+on app01 'crontab -r -u darkroom 2>/dev/null; true'

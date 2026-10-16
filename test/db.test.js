@@ -28,3 +28,18 @@ test('tasks, messages, attempts, mastery, settings, streak round-trip', () => {
   assert.equal(db.streak('2026-10-16'), 3); // today not done yet: streak still alive
   assert.equal(db.streak('2026-10-17'), 0);
 });
+
+test('resetProgress wipes progress and chat but keeps settings', () => {
+  const db = openDb(':memory:');
+  const id = db.createTask({ scenarioId: 's1', vars: {}, channel: 'platform', persona: 'marcus' });
+  db.updateTask(id, { state: 'passed', xpAwarded: 50 });
+  db.addMessage({ channel: 'platform', author: 'me', body: 'x' });
+  db.setMastery('files', 40, 1); db.markPassDay('2026-10-15'); db.setSetting('paused', true);
+  db.resetProgress();
+  assert.equal(db.totalXp(), 0);
+  assert.equal(db.recentTasks(5).length, 0);
+  assert.equal(db.messages({ channel: 'platform' }).length, 0);
+  assert.deepEqual(db.getMastery(), {});
+  assert.equal(db.streak('2026-10-15'), 0);
+  assert.equal(db.getSetting('paused'), true);
+});

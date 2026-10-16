@@ -8,7 +8,7 @@ alert: true
 targets: [db01, app01]
 vars: {}
 message: |
-  [FIRING] KestrelApiDbDown — app01 kestrel-api health reports db: down (db01:5432). @dhan
+  [FIRING] DarkroomApiDbDown — app01 darkroom-api health reports db: down (db01:5432). @dhan
 secret_context: |
   Two faults on db01: (1) postgresql.conf listen_addresses was changed to 'localhost' and postgres restarted, so it only listens on
   127.0.0.1; (2) someone added a live nftables input rule on db01 dropping tcp dport 5432. Both must be fixed for app01 to connect.

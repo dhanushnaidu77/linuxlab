@@ -13,7 +13,7 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
 function systemPrompt({ persona, title, secret }) {
   return [
-    `You are role-playing ${persona.name}, ${persona.role} at Kestrel Labs, chatting in the company Slack with a colleague (the user) who is the go-to Linux/infra person.`,
+    `You are role-playing ${persona.name}, ${persona.role} at Darkroom Labs, chatting in the company Slack with a colleague (the user) who is the go-to Linux/infra person.`,
     `Your personality and writing style: ${persona.style}`,
     `Your technical level is ${persona.tech_level}/5 — never use knowledge beyond it.`,
     `The request you made: "${title}".`,

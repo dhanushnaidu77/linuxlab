@@ -1,9 +1,9 @@
 ## Fix
 ```bash
 ssh app01
-sudo crontab -u kestrel -e
-#   */15 * * * * /opt/kestrel/cleanup-tmp.sh
-sudo crontab -u kestrel -l
+sudo crontab -u darkroom -e
+#   */15 * * * * /opt/darkroom/cleanup-tmp.sh
+sudo crontab -u darkroom -l
 ```
 
 ## Cron cheat sheet

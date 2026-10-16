@@ -12,8 +12,8 @@ message: |
 secret_context: |
   /etc/cron.d/nightly-report was edited with the wrong permissions (group-writable, 664) — cron refuses to load it and logs
   "WRONG FILE MODE" to the journal (journalctl -u cron). Today's report /srv/reports/report-YYYY-MM-DD.csv must exist and be
-  owned by kestrel (the job runs as kestrel). Priya doesn't know what cron is.
+  owned by darkroom (the job runs as darkroom). Priya doesn't know what cron is.
 hints:
   - "Scheduled jobs on Linux are usually cron. Find the job definition and check cron's own logs."
   - "`journalctl -u cron` shows why cron skipped a file. Files in /etc/cron.d must not be group/world-writable."
-  - "sudo chmod 644 /etc/cron.d/nightly-report && sudo -u kestrel /opt/kestrel/nightly-report.sh"
+  - "sudo chmod 644 /etc/cron.d/nightly-report && sudo -u darkroom /opt/darkroom/nightly-report.sh"

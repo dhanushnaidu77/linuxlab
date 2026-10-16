@@ -11,7 +11,7 @@ message: |
   @dhan IDS says something on app01 sends HTTP Basic auth over plain HTTP to web01 every few seconds. which username is it using?
   I need it to rotate that account's password.
 secret_context: |
-  A loop on app01 runs `curl -u {{USER}}:<password> http://web01.kestrel.internal/private/` every 2s. Capturing port 80 with
+  A loop on app01 runs `curl -u {{USER}}:<password> http://web01.darkroom.internal/private/` every 2s. Capturing port 80 with
   payload (-A) shows "Authorization: Basic <base64>"; base64 -d gives "{{USER}}:<password>". Sam wants just the username.
 answer: { type: exact, extract: "the username", value: "{{USER}}" }
 hints:

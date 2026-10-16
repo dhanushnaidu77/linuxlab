@@ -94,6 +94,15 @@ export function createApp({ auth, db, defs, scenarios, tm, persona, lab, log = (
     if (r.ok) tm.cancelOpen(host ? `${host} was reset` : 'the lab was reset');
     res.json({ ok: r.ok, error: r.ok ? undefined : r.stderr.slice(0, 500) });
   }));
+  // testing aid: wipe all progress/chat and rebuild the whole lab
+  app.post('/api/reset-all', wrap(async (req, res) => {
+    tm.cancelOpen('everything was reset');
+    db.resetProgress();
+    tm.rescheduleSpawn();
+    const r = await lab.reset(null);
+    broadcast({ type: 'reset' });
+    res.json({ ok: r.ok, error: r.ok ? undefined : r.stderr.slice(0, 500) });
+  }));
   app.post('/api/lab/start', wrap(async (req, res) => { const r = await lab.start(); res.json({ ok: r.ok, error: r.ok ? undefined : r.stderr.slice(0, 500) }); }));
 
   // ---- websockets

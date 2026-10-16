@@ -1,18 +1,18 @@
 ## Investigate
 ```bash
 ssh app01
-systemctl status kestrel-api            # "activating (auto-restart)", restart counter climbing
-journalctl -u kestrel-api -n 30 --no-pager
+systemctl status darkroom-api            # "activating (auto-restart)", restart counter climbing
+journalctl -u darkroom-api -n 30 --no-pager
 # FATAL: bad config: invalid literal for int() with base 10: '{{BAD}}'
-grep -n port /etc/kestrel/api.conf
+grep -n port /etc/darkroom/api.conf
 ```
 
 ## Fix
 ```bash
-sudoedit /etc/kestrel/api.conf        # [server] port = 8080 — careful, [database] also has a port line
+sudoedit /etc/darkroom/api.conf        # [server] port = 8080 — careful, [database] also has a port line
 # or, scoped to the [server] section only:
-sudo sed -i '/^\[server\]/,/^\[/ s/^port = .*/port = 8080/' /etc/kestrel/api.conf
-sudo systemctl restart kestrel-api
+sudo sed -i '/^\[server\]/,/^\[/ s/^port = .*/port = 8080/' /etc/darkroom/api.conf
+sudo systemctl restart darkroom-api
 curl localhost:8080/health
 ```
 

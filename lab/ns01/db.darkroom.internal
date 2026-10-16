@@ -1,8 +1,8 @@
 $TTL 300
-@   IN SOA ns01.kestrel.internal. hostmaster.kestrel.internal. (
+@   IN SOA ns01.darkroom.internal. hostmaster.darkroom.internal. (
         2026101501 ; serial
         3600 600 86400 300 )
-    IN NS ns01.kestrel.internal.
+    IN NS ns01.darkroom.internal.
 ns01    IN A 10.10.3.53
 jump01  IN A 10.10.1.10
 rtr01   IN A 10.10.1.1

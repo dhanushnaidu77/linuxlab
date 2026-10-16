@@ -84,8 +84,8 @@
 ### Task 9: Lab images + compose
 **Files:** `lab/docker-compose.yml`, `lab/base/{Dockerfile,lab-entrypoint,lab-net.service,lab-net.sh}`, `lab/{web01,app01,db01,ns01,rtr01,jump01}/...`, `scripts/lab`.
 - [ ] Base image: systemd, sshd, tooling, user dhan + shared key; `lab-net.service` sets default route via `$LAB_GW` and resolv.conf → ns01.
-- [ ] Roles: rtr01 (ip_forward, nftables allow-all baseline), web01 (nginx site `kestrel.internal`), app01 (`kestrel-api` python service :8080 + cron), db01 (postgresql 16 listening on backend), ns01 (bind9 zone `kestrel.internal`).
-- [ ] Verify: all hosts `systemctl is-system-running` ∈ {running, degraded-without-failures}; from jump01: `ssh web01 hostname`, `dig +short db01.kestrel.internal`, `curl -s web01`, `ping -c1 10.10.3.20`. Commit.
+- [ ] Roles: rtr01 (ip_forward, nftables allow-all baseline), web01 (nginx site `darkroom.internal`), app01 (`darkroom-api` python service :8080 + cron), db01 (postgresql 16 listening on backend), ns01 (bind9 zone `darkroom.internal`).
+- [ ] Verify: all hosts `systemctl is-system-running` ∈ {running, degraded-without-failures}; from jump01: `ssh web01 hostname`, `dig +short db01.darkroom.internal`, `curl -s web01`, `ping -c1 10.10.3.20`. Commit.
 
 ### Task 10: Scenario bank + self-test
 **Files:** `scenarios/**`, `scripts/test-scenarios.js` (`npm run test:scenarios [id]`).

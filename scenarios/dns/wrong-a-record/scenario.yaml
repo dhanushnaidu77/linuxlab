@@ -11,10 +11,10 @@ message: |
   @dhan api health check says `"db": "down"` but I can connect to postgres on db01 just fine with its IP?? wtf
   nothing changed on our side (I think 😅)
 secret_context: |
-  Someone edited DNS on ns01: db01.kestrel.internal now points to {{WRONG}} instead of 10.10.3.20. The API connects by
-  hostname (db01.kestrel.internal) so it fails; connecting by IP works. Fix the A record in /etc/bind/db.kestrel.internal and reload.
+  Someone edited DNS on ns01: db01.darkroom.internal now points to {{WRONG}} instead of 10.10.3.20. The API connects by
+  hostname (db01.darkroom.internal) so it fails; connecting by IP works. Fix the A record in /etc/bind/db.darkroom.internal and reload.
   Tom connected with "psql -h 10.10.3.20" which is why it worked for him.
 hints:
   - "If it works by IP but not by name, compare what the name resolves to with the real IP."
-  - "`dig db01.kestrel.internal` from app01. If it's wrong, the record lives in the zone file on ns01."
-  - "ssh ns01; fix the db01 line in /etc/bind/db.kestrel.internal to 10.10.3.20, bump the serial, sudo rndc reload"
+  - "`dig db01.darkroom.internal` from app01. If it's wrong, the record lives in the zone file on ns01."
+  - "ssh ns01; fix the db01 line in /etc/bind/db.darkroom.internal to 10.10.3.20, bump the serial, sudo rndc reload"

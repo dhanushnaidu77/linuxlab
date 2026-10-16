@@ -8,13 +8,13 @@ targets: [app01]
 vars:
   BAK: { from_setup: true }
 message: |
-  ngl I think I broke /etc/kestrel/api.conf on app01 while "cleaning it up" lol 😅 the api is down now.
+  ngl I think I broke /etc/darkroom/api.conf on app01 while "cleaning it up" lol 😅 the api is down now.
   there should be backups somewhere in /var/backups — can you put the last good one back and get the api running again?
 secret_context: |
-  Tom deleted the [server] section of /etc/kestrel/api.conf, so kestrel-api crashes with "bad config".
-  Several dated backups exist in /var/backups/kestrel/; the newest one ({{BAK}}) is the good one. Older ones point at an old db host.
-  The service needs a restart after restoring. Tom doesn't know the service name is kestrel-api unless asked.
+  Tom deleted the [server] section of /etc/darkroom/api.conf, so darkroom-api crashes with "bad config".
+  Several dated backups exist in /var/backups/darkroom/; the newest one ({{BAK}}) is the good one. Older ones point at an old db host.
+  The service needs a restart after restoring. Tom doesn't know the service name is darkroom-api unless asked.
 hints:
-  - "Look at what's in /var/backups/kestrel and compare dates/contents. Then the service needs to pick up the file."
+  - "Look at what's in /var/backups/darkroom and compare dates/contents. Then the service needs to pick up the file."
   - "`ls -lt` shows newest first; `diff` shows what changed. After copying it back, restart the systemd unit."
-  - "sudo cp /var/backups/kestrel/<newest>.bak /etc/kestrel/api.conf && sudo systemctl restart kestrel-api"
+  - "sudo cp /var/backups/darkroom/<newest>.bak /etc/darkroom/api.conf && sudo systemctl restart darkroom-api"

@@ -1,4 +1,4 @@
-name: kestrel-lab
+name: darkroom-lab
 
 x-host: &host
   cgroup: private

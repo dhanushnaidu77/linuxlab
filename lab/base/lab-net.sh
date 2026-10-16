@@ -4,4 +4,4 @@
 if [ -n "$LAB_GW" ]; then
   ip route replace default via "$LAB_GW" || true
 fi
-printf 'nameserver 10.10.3.53\nsearch kestrel.internal\n' > /etc/resolv.conf
+printf 'nameserver 10.10.3.53\nsearch darkroom.internal\n' > /etc/resolv.conf

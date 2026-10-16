@@ -2,7 +2,7 @@ on rtr01 <<'X'
 cp /etc/nftables.conf /root/nftables.conf.orig
 cat > /etc/nftables.conf <<'NFT'
 #!/usr/sbin/nft -f
-# Kestrel Labs edge/core router firewall
+# Darkroom Labs edge/core router firewall
 flush ruleset
 
 table inet filter {

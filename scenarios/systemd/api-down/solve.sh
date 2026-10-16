@@ -1,1 +1,1 @@
-on app01 'systemctl enable --now kestrel-api; sleep 1'
+on app01 'systemctl enable --now darkroom-api; sleep 1'

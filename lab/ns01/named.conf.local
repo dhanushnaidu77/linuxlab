@@ -1,6 +1,6 @@
-zone "kestrel.internal" {
+zone "darkroom.internal" {
     type master;
-    file "/etc/bind/db.kestrel.internal";
+    file "/etc/bind/db.darkroom.internal";
 };
 zone "10.10.in-addr.arpa" {
     type master;

@@ -5,7 +5,7 @@
 
 ## 1. Purpose
 
-A LAN-only web console for daily Linux/networking practice that simulates being the go-to ops person at a fictional company ("Kestrel Labs"). Coworker personas tag the user in Slack-style chat with realistic requests; the user does the work in a real terminal against a containerized lab network, replies "done", and an automated check verifies the work.
+A LAN-only web console for daily Linux/networking practice that simulates being the go-to ops person at a fictional company ("Darkroom Labs"). Coworker personas tag the user in Slack-style chat with realistic requests; the user does the work in a real terminal against a containerized lab network, replies "done", and an automated check verifies the work.
 
 **Success criteria**
 - User can open `http://10.0.0.97:8088` from any LAN device, log in, and receive tasks.
@@ -43,7 +43,7 @@ All hosts: Ubuntu 24.04, systemd as PID 1, user `dhan` with passwordless sudo, S
 | web01 | dmz-net 10.10.2.10                              | nginx |
 | app01 | backend-net 10.10.3.10                          | App service (systemd unit), cron jobs |
 | db01  | backend-net 10.10.3.20                          | PostgreSQL |
-| ns01  | backend-net 10.10.3.53                          | bind9, authoritative for `kestrel.internal` |
+| ns01  | backend-net 10.10.3.53                          | bind9, authoritative for `darkroom.internal` |
 
 - Hosts use rtr01 as default gateway and ns01 as resolver; Docker's embedded DNS is not relied on for lab names.
 - Compose networks are `internal: true` (no internet). Optional `aptcache` service (apt-cacher-ng) on a separate network reachable only by rtr01-forwarded traffic, enabled for package scenarios.

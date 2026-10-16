@@ -7,12 +7,12 @@ persona: sam
 targets: [app01]
 vars: {}
 message: |
-  @dhan audit finding on app01: /etc/kestrel/db.secret is world-readable. fix it today.
-  root owns it, only the kestrel service account may read it. nobody else. the api must keep working.
+  @dhan audit finding on app01: /etc/darkroom/db.secret is world-readable. fix it today.
+  root owns it, only the darkroom service account may read it. nobody else. the api must keep working.
 secret_context: |
-  The file is mode 0644 root:root. Correct: owner root, group kestrel, mode 0640 (or 0440). kestrel user must still read it.
-  Sam will reject 0600 root:root because the service (running as kestrel) then can't read it.
+  The file is mode 0644 root:root. Correct: owner root, group darkroom, mode 0640 (or 0440). darkroom user must still read it.
+  Sam will reject 0600 root:root because the service (running as darkroom) then can't read it.
 hints:
   - "Two things decide who can read: the group owner and the mode bits."
-  - "Make the kestrel group the group-owner and remove 'others' read: chgrp + chmod 640."
-  - "sudo chown root:kestrel /etc/kestrel/db.secret && sudo chmod 640 /etc/kestrel/db.secret"
+  - "Make the darkroom group the group-owner and remove 'others' read: chgrp + chmod 640."
+  - "sudo chown root:darkroom /etc/darkroom/db.secret && sudo chmod 640 /etc/darkroom/db.secret"

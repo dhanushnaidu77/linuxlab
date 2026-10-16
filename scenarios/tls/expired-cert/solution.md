@@ -1,6 +1,6 @@
 ## Investigate
 ```bash
-echo | openssl s_client -connect web01.kestrel.internal:443 -servername web01.kestrel.internal 2>/dev/null \
+echo | openssl s_client -connect web01.darkroom.internal:443 -servername web01.darkroom.internal 2>/dev/null \
   | openssl x509 -noout -subject -dates           # notAfter=Feb  1 00:00:00 2025 GMT
 ssh web01 'grep ssl_certificate /etc/nginx/sites-enabled/*'
 ```
@@ -9,9 +9,9 @@ ssh web01 'grep ssl_certificate /etc/nginx/sites-enabled/*'
 ```bash
 ssh web01
 sudo openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-  -subj /CN=web01.kestrel.internal \
-  -addext "subjectAltName=DNS:web01.kestrel.internal,DNS:www.kestrel.internal" \
-  -keyout /etc/nginx/ssl/kestrel.key -out /etc/nginx/ssl/kestrel.crt
+  -subj /CN=web01.darkroom.internal \
+  -addext "subjectAltName=DNS:web01.darkroom.internal,DNS:www.darkroom.internal" \
+  -keyout /etc/nginx/ssl/darkroom.key -out /etc/nginx/ssl/darkroom.crt
 sudo nginx -t && sudo systemctl reload nginx
 ```
 

@@ -1,1 +1,1 @@
-on ns01 'cp /etc/bind/db.kestrel.internal /root/zone.orig; sed -i "/^$NAME\s/d" /etc/bind/db.kestrel.internal; rndc reload >/dev/null 2>&1; grep -oE "[0-9]{10}" /etc/bind/db.kestrel.internal | head -1 > /root/serial.orig'
+on ns01 'cp /etc/bind/db.darkroom.internal /root/zone.orig; sed -i "/^$NAME\s/d" /etc/bind/db.darkroom.internal; rndc reload >/dev/null 2>&1; grep -oE "[0-9]{10}" /etc/bind/db.darkroom.internal | head -1 > /root/serial.orig'

@@ -1,2 +1,2 @@
-on web01 'cp /root/kestrel.orig /etc/nginx/sites-available/kestrel; systemctl restart nginx'
-on app01 'systemctl start kestrel-api'
+on web01 'cp /root/darkroom.orig /etc/nginx/sites-available/darkroom; systemctl restart nginx'
+on app01 'systemctl start darkroom-api'

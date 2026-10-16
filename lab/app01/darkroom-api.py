@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Kestrel internal API — tiny stand-in service for the lab."""
+"""Darkroom internal API — tiny stand-in service for the lab."""
 import configparser, json, logging, socket, sys, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 cfg = configparser.ConfigParser()
-if not cfg.read("/etc/kestrel/api.conf"):
-    print("FATAL: cannot read /etc/kestrel/api.conf", file=sys.stderr); sys.exit(1)
+if not cfg.read("/etc/darkroom/api.conf"):
+    print("FATAL: cannot read /etc/darkroom/api.conf", file=sys.stderr); sys.exit(1)
 try:
     PORT = cfg.getint("server", "port")
     DB_HOST = cfg.get("database", "host")
@@ -13,7 +13,7 @@ try:
 except Exception as e:  # noqa: BLE001
     print(f"FATAL: bad config: {e}", file=sys.stderr); sys.exit(1)
 
-logging.basicConfig(filename=cfg.get("server", "log", fallback="/var/log/kestrel/api.log"),
+logging.basicConfig(filename=cfg.get("server", "log", fallback="/var/log/darkroom/api.log"),
                     level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 def db_ok():
@@ -27,7 +27,7 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.rstrip("/") in ("", "/health"):
             ok = db_ok()
-            body = json.dumps({"service": "kestrel-api", "db": "up" if ok else "down", "ts": int(time.time())})
+            body = json.dumps({"service": "darkroom-api", "db": "up" if ok else "down", "ts": int(time.time())})
             self.send_response(200 if ok else 503)
             if not ok: logging.error("health check failed: cannot reach db %s:%s", DB_HOST, DB_PORT)
         else:

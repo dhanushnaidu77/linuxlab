@@ -1,24 +1,24 @@
 ## Fix
 ```
-# /etc/logrotate.d/kestrel-report
-/var/log/kestrel/report.log {
+# /etc/logrotate.d/darkroom-report
+/var/log/darkroom/report.log {
   daily
   rotate 7
   compress
   missingok
   notifempty
-  su kestrel kestrel
+  su darkroom darkroom
 }
 ```
 ```bash
-sudo logrotate -d /etc/logrotate.d/kestrel-report   # dry run — read the output!
-sudo logrotate -f /etc/logrotate.d/kestrel-report   # force one rotation
-ls -l /var/log/kestrel/
+sudo logrotate -d /etc/logrotate.d/darkroom-report   # dry run — read the output!
+sudo logrotate -f /etc/logrotate.d/darkroom-report   # force one rotation
+ls -l /var/log/darkroom/
 ```
 
 ## The gotcha
-`/var/log/kestrel` is owned by `kestrel`, not root. logrotate refuses to work in a directory a non-root user can write
-("parent directory has insecure permissions") because that user could swap files for symlinks. `su kestrel kestrel`
+`/var/log/darkroom` is owned by `darkroom`, not root. logrotate refuses to work in a directory a non-root user can write
+("parent directory has insecure permissions") because that user could swap files for symlinks. `su darkroom darkroom`
 makes logrotate drop to that user for this log.
 
 ## Other directives worth knowing

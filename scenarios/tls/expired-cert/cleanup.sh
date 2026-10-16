@@ -1,1 +1,1 @@
-on web01 'cp /root/kestrel.crt.orig /etc/nginx/ssl/kestrel.crt; cp /root/kestrel.key.orig /etc/nginx/ssl/kestrel.key; systemctl reload nginx'
+on web01 'cp /root/darkroom.crt.orig /etc/nginx/ssl/darkroom.crt; cp /root/darkroom.key.orig /etc/nginx/ssl/darkroom.key; systemctl reload nginx'

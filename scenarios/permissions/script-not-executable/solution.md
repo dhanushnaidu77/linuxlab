@@ -1,13 +1,13 @@
 ## What was wrong
-`/opt/kestrel/nightly-report.sh` had mode `644` (`rw-r--r--`) — no execute bit for anyone.
+`/opt/darkroom/nightly-report.sh` had mode `644` (`rw-r--r--`) — no execute bit for anyone.
 
 ## Fix
 ```bash
 ssh app01
-ls -l /opt/kestrel/nightly-report.sh
-sudo chown root:root /opt/kestrel/nightly-report.sh
-sudo chmod 755 /opt/kestrel/nightly-report.sh
-sudo -u kestrel /opt/kestrel/nightly-report.sh    # test as the user that actually runs it
+ls -l /opt/darkroom/nightly-report.sh
+sudo chown root:root /opt/darkroom/nightly-report.sh
+sudo chmod 755 /opt/darkroom/nightly-report.sh
+sudo -u darkroom /opt/darkroom/nightly-report.sh    # test as the user that actually runs it
 ```
 
 ## Notes

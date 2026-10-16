@@ -1,14 +1,14 @@
 ## Outside in
 ```bash
-curl -v http://web01.kestrel.internal/          # connection refused → nothing listening on web01:80
+curl -v http://web01.darkroom.internal/          # connection refused → nothing listening on web01:80
 ssh web01
 systemctl status nginx                          # failed
 sudo nginx -t                                   # "invalid number of arguments in "index" directive ... line 11"
-sudoedit /etc/nginx/sites-available/kestrel     # add the missing ';'
+sudoedit /etc/nginx/sites-available/darkroom     # add the missing ';'
 sudo nginx -t && sudo systemctl start nginx
-curl http://web01.kestrel.internal/api/health   # 502 → upstream (app01) is down
-ssh app01 'systemctl status kestrel-api'        # inactive
-ssh app01 'sudo systemctl start kestrel-api'
+curl http://web01.darkroom.internal/api/health   # 502 → upstream (app01) is down
+ssh app01 'systemctl status darkroom-api'        # inactive
+ssh app01 'sudo systemctl start darkroom-api'
 ```
 
 ## Incident habits

@@ -2,7 +2,7 @@
 ```bash
 ssh app01
 pgrep -af feeder                                   # note the PID
-sudo sed -i 's/^rate=.*/rate={{RATE}}/' /etc/kestrel/feeder.conf
+sudo sed -i 's/^rate=.*/rate={{RATE}}/' /etc/darkroom/feeder.conf
 sudo kill -HUP <PID>                               # or: sudo pkill -HUP -f '[f]eeder.py'
 cat /run/feeder.state                              # active_rate={{RATE}}
 pgrep -af feeder                                   # same PID as before

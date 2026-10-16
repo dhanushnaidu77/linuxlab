@@ -1,13 +1,13 @@
 # LinuxLab Console
 
-A LAN-only web console for everyday Linux and networking practice. Coworkers at the fictional **Kestrel Labs** tag you in a
+A LAN-only web console for everyday Linux and networking practice. Coworkers at the fictional **Darkroom Labs** tag you in a
 Slack-style chat with realistic requests ("app01 is crawling", "add a DNS record", "who's sniffing plaintext creds?").
 You do the work in a real terminal on a containerized lab network, reply "done" (or paste the answer), and a script checks it.
 
 ```
  office-net 10.10.1.0/24        dmz-net 10.10.2.0/24        backend-net 10.10.3.0/24
  jump01 (you start here) ── rtr01 (router + nftables) ── web01 (nginx)
-                                                    └──── app01 (kestrel-api, cron) · db01 (postgres) · ns01 (bind9)
+                                                    └──── app01 (darkroom-api, cron) · db01 (postgres) · ns01 (bind9)
 ```
 All hosts are Ubuntu 24.04 with real systemd. You can SSH from jump01 to any of them (`ssh web01`) and use sudo everywhere.
 The lab has no internet access and can't reach your LAN.

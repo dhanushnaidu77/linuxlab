@@ -1,6 +1,6 @@
 on web01 <<'X'
 set -e
-f=/var/log/nginx/kestrel.access.log; : > $f
+f=/var/log/nginx/darkroom.access.log; : > $f
 ips=(); for i in $(seq 1 15); do ips+=("10.10.$((RANDOM%3+1)).$((RANDOM%200+20))"); done
 top=${ips[$((RANDOM%15))]}
 paths=(/ /api/health /index.html /favicon.ico /api/orders /login)

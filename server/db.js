@@ -90,6 +90,8 @@ export function openDb(file) {
       while (has(d)) { n++; d = dayBefore(d); }
       return n;
     },
+    // wipe all progress and chat history; settings are kept
+    resetProgress: () => db.exec('DELETE FROM tasks; DELETE FROM messages; DELETE FROM attempts; DELETE FROM mastery; DELETE FROM pass_days;'),
     close: () => db.close(),
   };
 }

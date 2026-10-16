@@ -1,14 +1,14 @@
 ## What was wrong
-The `[server]` section was deleted from `/etc/kestrel/api.conf`, so the service exited at startup.
+The `[server]` section was deleted from `/etc/darkroom/api.conf`, so the service exited at startup.
 
 ## Fix
 ```bash
 ssh app01
-ls -lt /var/backups/kestrel/                 # newest first
-diff /var/backups/kestrel/api.conf.20261001.bak /etc/kestrel/api.conf
-sudo cp /var/backups/kestrel/api.conf.20261001.bak /etc/kestrel/api.conf
-sudo systemctl restart kestrel-api
-systemctl status kestrel-api
+ls -lt /var/backups/darkroom/                 # newest first
+diff /var/backups/darkroom/api.conf.20261001.bak /etc/darkroom/api.conf
+sudo cp /var/backups/darkroom/api.conf.20261001.bak /etc/darkroom/api.conf
+sudo systemctl restart darkroom-api
+systemctl status darkroom-api
 curl localhost:8080/health
 ```
 

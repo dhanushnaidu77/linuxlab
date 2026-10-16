@@ -1,5 +1,5 @@
 #!/bin/bash
-# Manage the Kestrel lab containers.
+# Manage the Darkroom lab containers.
 #   scripts/lab build | up | down | status | reset [host] | wait [host...]
 set -euo pipefail
 cd "$(dirname "$0")/../lab"

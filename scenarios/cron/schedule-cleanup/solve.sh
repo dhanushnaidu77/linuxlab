@@ -1,1 +1,1 @@
-on app01 'echo "*/15 * * * * /opt/kestrel/cleanup-tmp.sh" | crontab -u kestrel -'
+on app01 'echo "*/15 * * * * /opt/darkroom/cleanup-tmp.sh" | crontab -u darkroom -'

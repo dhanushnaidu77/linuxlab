@@ -1,1 +1,1 @@
-on app01 'cp /root/kestrel-api.service.orig /etc/systemd/system/kestrel-api.service && systemctl daemon-reload && systemctl restart kestrel-api'
+on app01 'cp /root/darkroom-api.service.orig /etc/systemd/system/darkroom-api.service && systemctl daemon-reload && systemctl restart darkroom-api'

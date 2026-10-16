@@ -1,8 +1,8 @@
 ## Fix
 ```bash
 ssh app01
-ls -l /var/log/kestrel/
-zgrep 'export job failed' /var/log/kestrel/api.log*     # searches plain AND .gz files
+ls -l /var/log/darkroom/
+zgrep 'export job failed' /var/log/darkroom/api.log*     # searches plain AND .gz files
 ```
 
 ## Notes

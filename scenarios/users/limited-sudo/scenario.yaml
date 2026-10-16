@@ -8,13 +8,13 @@ targets: [app01]
 vars:
   USER: { pick: [tom, noah, hana] }
 message: |
-  @dhan {{USER}} keeps pinging me to restart kestrel-api on app01. give them sudo for exactly
-  `systemctl restart kestrel-api` and nothing else. no full sudo.
+  @dhan {{USER}} keeps pinging me to restart darkroom-api on app01. give them sudo for exactly
+  `systemctl restart darkroom-api` and nothing else. no full sudo.
 secret_context: |
   {{USER}} exists on app01 with no sudo rights. Correct: a file in /etc/sudoers.d/ (via visudo -f) with
-  "{{USER}} ALL=(root) /usr/bin/systemctl restart kestrel-api" (NOPASSWD is fine, they have no password).
+  "{{USER}} ALL=(root) /usr/bin/systemctl restart darkroom-api" (NOPASSWD is fine, they have no password).
   A syntax error in sudoers breaks sudo for everyone — visudo prevents this.
 hints:
   - "sudo rules live in /etc/sudoers and /etc/sudoers.d/. There's a special editor that validates syntax."
   - "Create /etc/sudoers.d/{{USER}} with visudo -f. Use the full path to systemctl and NOPASSWD (they have no password)."
-  - "echo '{{USER}} ALL=(root) NOPASSWD: /usr/bin/systemctl restart kestrel-api' | sudo tee /etc/sudoers.d/{{USER}}; sudo chmod 440 /etc/sudoers.d/{{USER}}; sudo visudo -c"
+  - "echo '{{USER}} ALL=(root) NOPASSWD: /usr/bin/systemctl restart darkroom-api' | sudo tee /etc/sudoers.d/{{USER}}; sudo chmod 440 /etc/sudoers.d/{{USER}}; sudo visudo -c"

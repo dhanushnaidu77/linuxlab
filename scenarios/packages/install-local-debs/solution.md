@@ -1,15 +1,15 @@
 ## Investigate
 ```bash
 ssh app01
-ls /var/cache/kestrel/
-dpkg -I /var/cache/kestrel/kestrel-cli_{{VER}}_all.deb     # Depends: kestrel-common (>= {{VER}})
+ls /var/cache/darkroom/
+dpkg -I /var/cache/darkroom/darkroom-cli_{{VER}}_all.deb     # Depends: darkroom-common (>= {{VER}})
 ```
 
 ## Fix
 ```bash
-sudo dpkg -i /var/cache/kestrel/*.deb       # install both in one transaction
-# or: sudo apt install /var/cache/kestrel/*.deb   (apt resolves deps between local files)
-kestrel-cli --version
+sudo dpkg -i /var/cache/darkroom/*.deb       # install both in one transaction
+# or: sudo apt install /var/cache/darkroom/*.deb   (apt resolves deps between local files)
+darkroom-cli --version
 dpkg --audit                                # nothing half-configured left behind
 ```
 

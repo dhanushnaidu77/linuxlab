@@ -1,0 +1,715 @@
+# Habit drills: grep / sort / uniq / awk / cut / sed -n / head / tail on randomized logs and CSVs.
+
+- id: d-grep-count-ip
+  skill: text-processing
+  difficulty: 1
+  persona: leah
+  channel: netops
+  host: web01
+  title: Requests from one IP
+  vars:
+    IP: { pick: [10.10.1.10, 10.10.3.10, 10.10.2.77, 10.10.1.42] }
+  message: "@dhan how many requests did {{IP}} make according to /var/log/nginx/access-today.log on web01?"
+  setup: |
+    f=/var/log/nginx/access-today.log; : > $f
+    ips=(10.10.1.10 10.10.3.10 10.10.2.77 10.10.1.42 10.10.1.4 10.10.3.100 10.10.1.104)
+    for i in $(seq 900); do echo "${ips[$((RANDOM % 7))]} - - [16/Oct/2026:10:$((RANDOM%60)):00 +0000] \"GET /p/$i HTTP/1.1\" 200 512 \"-\" \"curl\""; done >> $f
+  expect: "grep -c \"^$IP \" /var/log/nginx/access-today.log"
+  answer: number
+  extract: "the number of requests"
+  hints:
+    - "Each line starts with the client IP. Count matching lines."
+    - "`grep -c` counts matching lines — anchor with ^ and a trailing space, or 10.10.1.10 also matches 10.10.1.104!"
+    - "grep -c '^{{IP}} ' /var/log/nginx/access-today.log"
+  solution: |
+    ```bash
+    grep -c '^{{IP}} ' /var/log/nginx/access-today.log
+    awk '$1 == "{{IP}}"' /var/log/nginx/access-today.log | wc -l     # exact field match
+    ```
+    Unanchored `grep -c {{IP}}` can over-count: dots match any character and `10.10.1.10` is a prefix of `10.10.1.104`.
+
+- id: d-grep-ci
+  skill: text-processing
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: Warnings in any case
+  message: "how many lines in /var/log/darkroom/build.log on app01 mention 'warning'? they spell it WARNING, Warning, warning… all of them count"
+  setup: |
+    f=/var/log/darkroom/build.log; : > $f
+    for i in $(seq 500); do case $((RANDOM % 8)) in 0) echo "step $i: WARNING deprecated flag";; 1) echo "step $i: Warning: unused var";; 2) echo "step $i: compiler warning W$RANDOM";; *) echo "step $i: ok";; esac >> $f; done
+  expect: "grep -ci warning /var/log/darkroom/build.log"
+  answer: number
+  extract: "the number of lines"
+  hints:
+    - "grep is case-sensitive by default."
+    - "`-i` ignores case; `-c` counts lines."
+    - "grep -ci warning /var/log/darkroom/build.log"
+  solution: |
+    ```bash
+    grep -ci warning /var/log/darkroom/build.log
+    ```
+
+- id: d-grep-active-config
+  skill: text-processing
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: How many settings are actually active?
+  message: "@dhan /etc/darkroom/worker.ini on app01 is 90% comments and blank lines. how many lines are actual settings?"
+  setup: |
+    f=/etc/darkroom/worker.ini; : > $f
+    for i in $(seq 120); do case $((RANDOM % 5)) in 0) echo "# comment about option $i";; 1) echo "";; 2) echo "   # indented comment";; 3) echo "option_$i = $RANDOM";; 4) echo "; ini-style comment $i";; esac >> $f; done
+  expect: "grep -vcE '^[[:space:]]*([#;]|$)' /etc/darkroom/worker.ini"
+  answer: number
+  extract: "the number of setting lines"
+  secret: "Comments start with # or ; (possibly indented). The answer is {{EXPECT}}."
+  hints:
+    - "Invert the match: count lines that are NOT comments and NOT empty. Look at what comment characters this file uses."
+    - "`grep -v` inverts; `-E` for alternation. Comments here start with # or ; (sometimes indented)."
+    - "grep -vcE '^[[:space:]]*([#;]|$)' /etc/darkroom/worker.ini"
+  solution: |
+    ```bash
+    grep -vE '^[[:space:]]*([#;]|$)' /etc/darkroom/worker.ini          # show the real settings
+    grep -vcE '^[[:space:]]*([#;]|$)' /etc/darkroom/worker.ini         # count them
+    ```
+    This is the #1 trick for reading long config files: `grep -vE '^\s*(#|$)' /etc/ssh/sshd_config`.
+
+- id: d-grep-todo-files
+  skill: text-processing
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: How many files have TODOs?
+  message: "lol how many files under /srv/code on app01 contain 'TODO'? (files, not lines)"
+  setup: |
+    rm -rf /srv/code && mkdir -p /srv/code/{api,web,lib}
+    for i in $(seq 30); do f=/srv/code/$(shuf -n1 -e api web lib)/mod_$i.py; echo "def f$i(): pass" > $f; [ $((RANDOM % 3)) = 0 ] && { echo "# TODO: fix this" >> $f; echo "# TODO: and this" >> $f; }; done
+  expect: "grep -rl TODO /srv/code | wc -l"
+  answer: number
+  extract: "the number of files"
+  hints:
+    - "grep can search recursively and print only file names."
+    - "`grep -r` recursive, `-l` list matching files once each."
+    - "grep -rl TODO /srv/code | wc -l"
+  solution: |
+    ```bash
+    grep -rl TODO /srv/code | wc -l     # files
+    grep -rc TODO /srv/code | grep -v ':0$'   # per-file counts
+    ```
+
+- id: d-grep-before-panic
+  skill: text-processing
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Request right before the panic
+  message: "@dhan there's exactly one 'panic' in /var/log/darkroom/service.log on app01. what's the req= id on the line right BEFORE it?"
+  setup: |
+    f=/var/log/darkroom/service.log; : > $f; n=$((RANDOM % 300 + 50))
+    for i in $(seq 400); do echo "12:00:$((i%60)) handled req=r$(printf %05x $((RANDOM*7+i)))"; [ $i = $n ] && echo "12:00:$((i%60)) panic: nil pointer dereference"; done >> $f
+  expect: "grep -B1 panic /var/log/darkroom/service.log | head -1 | grep -o 'req=[^ ]*' | cut -d= -f2"
+  answer: regex
+  extract: "the request id"
+  secret: "The request id is {{EXPECT}} (the user may include or omit the 'req=' prefix)."
+  hints:
+    - "grep can show context lines around a match."
+    - "`-B N` = N lines Before, `-A` After, `-C` both."
+    - "grep -B1 panic /var/log/darkroom/service.log"
+  solution: |
+    ```bash
+    grep -B1 panic /var/log/darkroom/service.log
+    grep -C3 panic /var/log/darkroom/service.log     # more context
+    ```
+
+- id: d-grep-whole-word
+  skill: text-processing
+  difficulty: 2
+  persona: kofi
+  channel: platform
+  host: app01
+  title: Lines with the word "fail" only
+  message: "hey @dhan 🙌 how many lines in /var/log/darkroom/tests.log contain the WORD 'fail' — as a word, so 'failed' or 'failure' don't count?"
+  setup: |
+    f=/var/log/darkroom/tests.log; : > $f
+    for i in $(seq 400); do case $((RANDOM % 7)) in 0) echo "test_$i fail";; 1) echo "test_$i failed after retry";; 2) echo "test_$i failure: timeout";; 3) echo "test_$i: fail (flaky)";; *) echo "test_$i pass";; esac >> $f; done
+  expect: "grep -cw fail /var/log/darkroom/tests.log"
+  answer: number
+  extract: "the number of lines"
+  hints:
+    - "You need whole-word matching, not substring matching."
+    - "`grep -w` matches only whole words (or use `\\bfail\\b` with -P / `\\<fail\\>`)."
+    - "grep -cw fail /var/log/darkroom/tests.log"
+  solution: |
+    ```bash
+    grep -cw fail /var/log/darkroom/tests.log
+    grep -c '\<fail\>' /var/log/darkroom/tests.log
+    ```
+
+- id: d-unique-emails
+  skill: text-processing
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: app01
+  title: Unique email addresses in a dump
+  message: "@dhan how many UNIQUE email addresses appear in /srv/data/mail-dump.txt on app01? GDPR request."
+  setup: |
+    f=/srv/data/mail-dump.txt; mkdir -p /srv/data; : > $f
+    n=$((RANDOM % 25 + 10))
+    for i in $(seq 300); do u=user$((RANDOM % n)); echo "From: <$u@example.com> Subject: ticket $i cc: $u@example.com"; done >> $f
+  expect: "grep -oE '[a-z0-9._-]+@[a-z0-9.-]+' /srv/data/mail-dump.txt | sort -u | wc -l"
+  answer: number
+  extract: "the number of unique addresses"
+  hints:
+    - "Extract every address (only the matching part), then deduplicate."
+    - "`grep -oE '<regex>'` prints each match; `sort -u | wc -l` counts unique ones."
+    - "grep -oE '[a-z0-9._-]+@[a-z0-9.-]+' /srv/data/mail-dump.txt | sort -u | wc -l"
+  solution: |
+    ```bash
+    grep -oE '[a-z0-9._-]+@[a-z0-9.-]+' /srv/data/mail-dump.txt | sort -u | wc -l
+    ```
+
+- id: d-first-error-time
+  skill: logs
+  difficulty: 1
+  persona: marcus
+  channel: platform
+  host: app01
+  title: When was the first error?
+  message: "@dhan what time (HH:MM:SS) is the FIRST ERROR line in /var/log/darkroom/sync.log on app01?"
+  setup: |
+    f=/var/log/darkroom/sync.log; : > $f; e=$((RANDOM % 200 + 20))
+    for i in $(seq 300); do t=$(printf '%02d:%02d:%02d' $((8 + i/60)) $((i%60)) $((RANDOM%60))); if [ $i -ge $e ] && [ $((RANDOM%4)) = 0 ]; then echo "2026-10-16 $t ERROR sync failed"; else echo "2026-10-16 $t INFO synced"; fi; done >> $f
+  expect: "grep -m1 ERROR /var/log/darkroom/sync.log | awk '{print $2}'"
+  answer: exact
+  extract: "the time HH:MM:SS"
+  hints:
+    - "Find the first matching line only."
+    - "`grep -m1` stops after the first match; `head -1` after a grep also works. Then take the time field."
+    - "grep -m1 ERROR /var/log/darkroom/sync.log"
+  solution: |
+    ```bash
+    grep -m1 ERROR /var/log/darkroom/sync.log | awk '{print $2}'
+    grep ERROR /var/log/darkroom/sync.log | tail -1     # the LAST one
+    ```
+
+- id: d-bash-users
+  skill: users
+  difficulty: 1
+  persona: sam
+  channel: platform
+  host: app01
+  title: Accounts with a real shell
+  message: "@dhan how many accounts on app01 have /bin/bash as their login shell?"
+  expect: "grep -c '/bin/bash$' /etc/passwd"
+  answer: number
+  extract: "the number of accounts"
+  setup: |
+    for u in svc-a svc-b; do id $u >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin $u; done
+  hints:
+    - "/etc/passwd has one line per account; the last field is the shell."
+    - "Count lines ending in /bin/bash."
+    - "grep -c '/bin/bash$' /etc/passwd"
+  solution: |
+    ```bash
+    grep -c '/bin/bash$' /etc/passwd
+    awk -F: '$7 == "/bin/bash" {print $1}' /etc/passwd      # names
+    getent passwd | grep bash                               # includes LDAP etc. if configured
+    ```
+
+- id: d-grep-config-ip
+  skill: text-processing
+  difficulty: 1
+  persona: leah
+  channel: netops
+  host: rtr01
+  title: Which route file mentions an IP?
+  vars:
+    IP: { pick: [10.10.3.77, 10.10.2.250, 10.10.9.14] }
+  message: "@dhan which file in /etc/darkroom/routes on rtr01 still references {{IP}}? (file name)"
+  setup: |
+    rm -rf /etc/darkroom/routes && mkdir -p /etc/darkroom/routes
+    names=(office dmz backend vpn lab guest legacy partner); hit=${names[$((RANDOM % 8))]}
+    for n in "${names[@]}"; do printf 'via 10.10.1.1\nnet 10.10.%d.0/24\n' $((RANDOM % 9)) > /etc/darkroom/routes/$n.route; done
+    echo "host $IP" >> /etc/darkroom/routes/$hit.route
+  expect: "grep -lF \"$IP\" /etc/darkroom/routes/* | xargs -n1 basename"
+  answer: regex
+  extract: "the file name"
+  hints:
+    - "Search all files for the address, print only the file names."
+    - "`grep -l`, and `-F` to treat dots literally (fixed string)."
+    - "grep -lF '{{IP}}' /etc/darkroom/routes/*"
+  solution: |
+    ```bash
+    grep -lF '{{IP}}' /etc/darkroom/routes/*
+    ```
+    `-F` = fixed string: no regex, so `.` is a literal dot.
+
+- id: d-grep-or
+  skill: text-processing
+  difficulty: 1
+  persona: kofi
+  channel: platform
+  host: app01
+  title: ERROR or FATAL lines
+  message: "hey! how many lines in /var/log/darkroom/core.log on app01 are either ERROR or FATAL? 🙌"
+  setup: |
+    f=/var/log/darkroom/core.log; : > $f
+    for i in $(seq 600); do echo "$(shuf -n1 -e INFO INFO INFO DEBUG WARN ERROR FATAL) event $i"; done >> $f
+  expect: "grep -cE '^(ERROR|FATAL) ' /var/log/darkroom/core.log"
+  answer: number
+  extract: "the number of lines"
+  hints:
+    - "grep can match one pattern OR another."
+    - "`grep -E 'A|B'` (extended regex alternation), or `grep -e A -e B`."
+    - "grep -cE 'ERROR|FATAL' /var/log/darkroom/core.log"
+  solution: |
+    ```bash
+    grep -cE 'ERROR|FATAL' /var/log/darkroom/core.log
+    grep -c -e ERROR -e FATAL /var/log/darkroom/core.log
+    ```
+
+- id: d-count-404
+  skill: text-processing
+  difficulty: 2
+  persona: priya
+  channel: platform
+  host: web01
+  title: How many 404s?
+  message: "hi @dhan! how many 404 (not found) responses are in /var/log/nginx/access-today.log on web01? the client says links are broken 😬"
+  setup: |
+    f=/var/log/nginx/access-today.log; : > $f
+    for i in $(seq 800); do s=$(shuf -n1 -e 200 200 200 200 301 404 500); echo "10.10.1.$((RANDOM%50)) - - [16/Oct/2026:11:00:00 +0000] \"GET /page/404-$i HTTP/1.1\" $s $((RANDOM%9000))"; done >> $f
+  expect: "awk '$9 == 404' /var/log/nginx/access-today.log | wc -l"
+  answer: number
+  extract: "the number of 404 responses"
+  secret: "Watch out: some URLs contain '404' in the path, so a plain grep 404 over-counts. The answer is {{EXPECT}}."
+  hints:
+    - "Careful: '404' also appears inside some URLs. Match the status code field specifically."
+    - "In nginx's log format the status is field 9: `awk '$9 == 404'`."
+    - "awk '$9 == 404' /var/log/nginx/access-today.log | wc -l"
+  solution: |
+    ```bash
+    awk '$9 == 404' /var/log/nginx/access-today.log | wc -l
+    awk '{print $9}' /var/log/nginx/access-today.log | sort | uniq -c | sort -rn     # all statuses
+    ```
+    `grep -c 404` would also count `GET /page/404-...` lines.
+
+- id: d-top-url
+  skill: text-processing
+  difficulty: 2
+  persona: priya
+  channel: platform
+  host: web01
+  title: Most requested page
+  message: "@dhan what's the most requested URL path in /var/log/nginx/access-today.log on web01? marketing wants to know 📈"
+  setup: |
+    f=/var/log/nginx/access-today.log; : > $f
+    paths=(/ /pricing /docs /blog /login /api/health /careers /about); top=${paths[$((RANDOM % 8))]}
+    for i in $(seq 900); do p=${paths[$((RANDOM % 8))]}; [ $((RANDOM % 4)) = 0 ] && p=$top; echo "10.10.1.$((RANDOM%60)) - - [16/Oct/2026:12:00:00 +0000] \"GET $p HTTP/1.1\" 200 100"; done >> $f
+  expect: "awk '{print $7}' /var/log/nginx/access-today.log | sort | uniq -c | sort -rn | head -1 | awk '{print $2}'"
+  answer: exact
+  extract: "the URL path"
+  hints:
+    - "Pull out the path column, count each distinct value, sort by count."
+    - "The path is field 7. Pipeline: awk → sort → uniq -c → sort -rn → head."
+    - "awk '{print $7}' /var/log/nginx/access-today.log | sort | uniq -c | sort -rn | head -3"
+  solution: |
+    ```bash
+    awk '{print $7}' /var/log/nginx/access-today.log | sort | uniq -c | sort -rn | head
+    ```
+    This "field → sort → uniq -c → sort -rn" pipeline answers half of all log questions.
+
+- id: d-top-status
+  skill: text-processing
+  difficulty: 1
+  persona: leah
+  channel: netops
+  host: web01
+  title: Most common status code
+  message: "@dhan which HTTP status code is most common in /var/log/nginx/access-today.log on web01?"
+  setup: |
+    f=/var/log/nginx/access-today.log; : > $f; codes=(200 301 302 404 500 503); top=${codes[$((RANDOM % 6))]}
+    for i in $(seq 700); do c=${codes[$((RANDOM % 6))]}; [ $((RANDOM % 3)) = 0 ] && c=$top; echo "10.10.1.5 - - [16/Oct/2026:12:00:00 +0000] \"GET /x HTTP/1.1\" $c 10"; done >> $f
+  expect: "awk '{print $9}' /var/log/nginx/access-today.log | sort | uniq -c | sort -rn | head -1 | awk '{print $2}'"
+  answer: number
+  extract: "the status code"
+  hints:
+    - "Count each distinct value of the status column."
+    - "Status is field 9. awk → sort → uniq -c → sort -rn."
+    - "awk '{print $9}' /var/log/nginx/access-today.log | sort | uniq -c | sort -rn"
+  solution: |
+    ```bash
+    awk '{print $9}' /var/log/nginx/access-today.log | sort | uniq -c | sort -rn
+    ```
+
+- id: d-unique-ips
+  skill: text-processing
+  difficulty: 1
+  persona: sam
+  channel: platform
+  host: web01
+  title: How many distinct clients?
+  message: "@dhan how many distinct client IPs are in /var/log/nginx/access-today.log on web01?"
+  setup: |
+    f=/var/log/nginx/access-today.log; : > $f; n=$((RANDOM % 40 + 10))
+    for i in $(seq 800); do echo "10.10.$((RANDOM % 3 + 1)).$((RANDOM % n)) - - [16/Oct/2026:12:00:00 +0000] \"GET / HTTP/1.1\" 200 10"; done >> $f
+  expect: "awk '{print $1}' /var/log/nginx/access-today.log | sort -u | wc -l"
+  answer: number
+  extract: "the number of distinct IPs"
+  hints:
+    - "Take the first column, deduplicate, count."
+    - "`awk '{print $1}'` or `cut -d' ' -f1`, then `sort -u | wc -l`."
+    - "cut -d' ' -f1 /var/log/nginx/access-today.log | sort -u | wc -l"
+  solution: |
+    ```bash
+    cut -d' ' -f1 /var/log/nginx/access-today.log | sort -u | wc -l
+    ```
+
+- id: d-sum-bytes
+  skill: text-processing
+  difficulty: 2
+  persona: ana
+  channel: data
+  host: web01
+  title: Total bytes served
+  message: "@dhan total bytes served in /var/log/nginx/access-today.log on web01? (sum of the response size column)"
+  setup: |
+    f=/var/log/nginx/access-today.log; : > $f
+    for i in $(seq 500); do echo "10.10.1.5 - - [16/Oct/2026:12:00:00 +0000] \"GET /f$i HTTP/1.1\" 200 $((RANDOM * 3))"; done >> $f
+  expect: "awk '{s += $10} END {print s}' /var/log/nginx/access-today.log"
+  answer: number
+  extract: "the total number of bytes"
+  hints:
+    - "awk can keep a running total across lines."
+    - "The size is field 10. Add it to a variable, print in an END block."
+    - "awk '{s += $10} END {print s}' /var/log/nginx/access-today.log"
+  solution: |
+    ```bash
+    awk '{s += $10} END {print s}' /var/log/nginx/access-today.log
+    awk '{s += $10} END {printf "%.1f MB\n", s/1024/1024}' /var/log/nginx/access-today.log
+    ```
+
+- id: d-avg-latency
+  skill: text-processing
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Average latency
+  message: "@dhan average of the latency_ms column in /srv/data/latency.csv on app01. integer is fine."
+  setup: |
+    f=/srv/data/latency.csv; mkdir -p /srv/data; echo "ts,endpoint,latency_ms,status" > $f
+    for i in $(seq 400); do echo "2026-10-16T12:$((i%60)),/api/$((RANDOM%5)),$((RANDOM % 400 + 20)),200" >> $f; done
+  expect: "awk -F, 'NR > 1 {s += $3; n++} END {printf \"%d\", s/n}' /srv/data/latency.csv"
+  answer: number
+  tolerance: 1
+  extract: "the average latency"
+  hints:
+    - "Skip the header, sum the column, divide by the count."
+    - "`awk -F,` for CSV; `NR > 1` skips the header; keep sum and count, print in END."
+    - "awk -F, 'NR>1 {s+=$3; n++} END {print s/n}' /srv/data/latency.csv"
+  solution: |
+    ```bash
+    awk -F, 'NR>1 {s+=$3; n++} END {print s/n}' /srv/data/latency.csv
+    ```
+
+- id: d-max-latency
+  skill: text-processing
+  difficulty: 1
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Worst latency
+  message: "@dhan highest latency_ms value in /srv/data/latency.csv on app01?"
+  setup: |
+    f=/srv/data/latency.csv; mkdir -p /srv/data; echo "ts,endpoint,latency_ms,status" > $f
+    for i in $(seq 400); do echo "2026-10-16T12:$((i%60)),/api/$((RANDOM%5)),$((RANDOM % 4000 + 20)),200" >> $f; done
+  expect: "tail -n +2 /srv/data/latency.csv | cut -d, -f3 | sort -n | tail -1"
+  answer: number
+  extract: "the highest latency"
+  hints:
+    - "Take the column, sort it numerically."
+    - "`cut -d, -f3`, then `sort -n` (numeric!) — plain sort puts 999 after 1000."
+    - "tail -n +2 /srv/data/latency.csv | cut -d, -f3 | sort -n | tail -1"
+  solution: |
+    ```bash
+    tail -n +2 /srv/data/latency.csv | cut -d, -f3 | sort -n | tail -1
+    awk -F, 'NR>1 && $3>m {m=$3} END {print m}' /srv/data/latency.csv
+    ```
+
+- id: d-biggest-department
+  skill: text-processing
+  difficulty: 2
+  persona: raj
+  channel: it-helpdesk
+  host: app01
+  title: Which department has the most people?
+  message: "Hi @dhan, which department has the most people in /srv/data/staff.csv on app01? (HR wants to plan seating 😅)"
+  setup: |
+    f=/srv/data/staff.csv; mkdir -p /srv/data; echo "id,name,department,start" > $f
+    deps=(Engineering Sales Finance Support Design Ops); top=${deps[$((RANDOM % 6))]}
+    for i in $(seq 200); do d=${deps[$((RANDOM % 6))]}; [ $((RANDOM % 4)) = 0 ] && d=$top; echo "$i,person$i,$d,2024-0$((RANDOM%9+1))-1$((RANDOM%9))" >> $f; done
+  expect: "tail -n +2 /srv/data/staff.csv | cut -d, -f3 | sort | uniq -c | sort -rn | head -1 | awk '{print $2}'"
+  answer: exact
+  extract: "the department name"
+  hints:
+    - "Extract the department column and count each value."
+    - "`cut -d, -f3` then `sort | uniq -c | sort -rn`."
+    - "cut -d, -f3 /srv/data/staff.csv | sort | uniq -c | sort -rn | head -3"
+  solution: |
+    ```bash
+    tail -n +2 /srv/data/staff.csv | cut -d, -f3 | sort | uniq -c | sort -rn
+    ```
+
+- id: d-lines-on-date
+  skill: logs
+  difficulty: 1
+  persona: ana
+  channel: data
+  host: app01
+  title: Log lines from one day
+  vars:
+    DAY: { pick: ["2026-10-12", "2026-10-13", "2026-10-14"] }
+  message: "@dhan how many lines in /var/log/darkroom/etl.log on app01 are from {{DAY}}?"
+  setup: |
+    f=/var/log/darkroom/etl.log; : > $f
+    for i in $(seq 700); do echo "2026-10-1$((RANDOM % 5 + 1)) 0$((RANDOM%9)):00:00 etl batch $i"; done | sort >> $f
+  expect: "grep -c \"^$DAY \" /var/log/darkroom/etl.log"
+  answer: number
+  extract: "the number of lines"
+  hints:
+    - "The date is at the start of each line."
+    - "`grep -c '^DATE '`"
+    - "grep -c '^{{DAY}} ' /var/log/darkroom/etl.log"
+  solution: |
+    ```bash
+    grep -c '^{{DAY}} ' /var/log/darkroom/etl.log
+    cut -d' ' -f1 /var/log/darkroom/etl.log | uniq -c       # lines per day (file is sorted)
+    ```
+
+- id: d-refund-total
+  skill: text-processing
+  difficulty: 2
+  persona: ana
+  channel: data
+  host: app01
+  title: Total of refunded orders
+  message: "@dhan sum of the amount column for orders with status 'refunded' in /srv/data/orders.csv on app01? (whole dollars)"
+  setup: |
+    f=/srv/data/orders.csv; mkdir -p /srv/data; echo "order_id,customer,amount,status" > $f
+    for i in $(seq 500); do echo "$i,c$((RANDOM%80)),$((RANDOM % 500 + 5)),$(shuf -n1 -e paid paid paid pending refunded)" >> $f; done
+  expect: "awk -F, '$4 == \"refunded\" {s += $3} END {print s}' /srv/data/orders.csv"
+  answer: number
+  extract: "the total"
+  hints:
+    - "Filter rows by one column, sum another."
+    - "`awk -F, '$4 == \"refunded\" {s += $3} END {print s}'`"
+    - "awk -F, '$4==\"refunded\" {s+=$3} END {print s}' /srv/data/orders.csv"
+  solution: |
+    ```bash
+    awk -F, '$4 == "refunded" {s += $3} END {print s}' /srv/data/orders.csv
+    awk -F, 'NR>1 {s[$4] += $3} END {for (k in s) print k, s[k]}' /srv/data/orders.csv     # all statuses
+    ```
+
+- id: d-earliest-hire
+  skill: text-processing
+  difficulty: 2
+  persona: raj
+  channel: it-helpdesk
+  host: app01
+  title: Longest-serving employee
+  message: "Hi @dhan, who has the earliest start date in /srv/data/hires.csv on app01? (name please, it's for an anniversary gift 🎁)"
+  setup: |
+    f=/srv/data/hires.csv; mkdir -p /srv/data; echo "name,team,start_date" > $f
+    for i in $(seq 60); do echo "person$i,team$((RANDOM%5)),20$((RANDOM % 6 + 19))-$(printf %02d $((RANDOM%12+1)))-$(printf %02d $((RANDOM%28+1)))" >> $f; done
+    echo "veteran$RANDOM,ops,2014-03-0$((RANDOM%9+1))" >> $f
+  expect: "tail -n +2 /srv/data/hires.csv | sort -t, -k3 | head -1 | cut -d, -f1"
+  answer: exact
+  extract: "the person's name"
+  hints:
+    - "Sort the rows by the date column. ISO dates (YYYY-MM-DD) sort correctly as text."
+    - "`sort -t, -k3` sorts by the 3rd comma-separated field."
+    - "tail -n +2 /srv/data/hires.csv | sort -t, -k3 | head -1"
+  solution: |
+    ```bash
+    tail -n +2 /srv/data/hires.csv | sort -t, -k3 | head -1
+    ```
+    `-t,` sets the field separator, `-k3` the key. `-k3,3` limits the key to just field 3.
+
+- id: d-duplicate-lines
+  skill: text-processing
+  difficulty: 2
+  persona: ana
+  channel: data
+  host: app01
+  title: How many values are duplicated?
+  message: "@dhan /srv/data/invoice-ids.txt on app01 should have unique ids but doesn't. how many ids appear MORE than once?"
+  setup: |
+    f=/srv/data/invoice-ids.txt; mkdir -p /srv/data; : > $f
+    for i in $(seq 300); do echo "INV-$((RANDOM % 280 + 1000))"; done | shuf > $f
+  expect: "sort /srv/data/invoice-ids.txt | uniq -d | wc -l"
+  answer: number
+  extract: "the number of duplicated ids"
+  hints:
+    - "uniq only works on adjacent lines, and it has a mode for duplicates."
+    - "`sort | uniq -d` prints one copy of each duplicated line."
+    - "sort /srv/data/invoice-ids.txt | uniq -d | wc -l"
+  solution: |
+    ```bash
+    sort /srv/data/invoice-ids.txt | uniq -d | wc -l      # ids that are duplicated
+    sort /srv/data/invoice-ids.txt | uniq -c | sort -rn | head   # with counts
+    ```
+
+- id: d-line-n
+  skill: text-processing
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: What's on line N?
+  vars:
+    N: { range: [100, 400] }
+  message: "the parser says the error is on line {{N}} of /srv/data/import.ndjson on app01. what's the id on that line?"
+  setup: |
+    f=/srv/data/import.ndjson; mkdir -p /srv/data; : > $f
+    for i in $(seq 500); do echo "{\"id\":\"imp-$(printf %06x $((RANDOM * 31 + i)))\",\"n\":$i}"; done >> $f
+  expect: "sed -n \"${N}p\" /srv/data/import.ndjson | grep -o 'imp-[0-9a-f]*'"
+  answer: regex
+  extract: "the id"
+  hints:
+    - "Print one specific line of a file."
+    - "`sed -n 'Np'` prints only line N; or `head -n N | tail -1`; or `awk 'NR==N'`."
+    - "sed -n '{{N}}p' /srv/data/import.ndjson"
+  solution: |
+    ```bash
+    sed -n '{{N}}p' /srv/data/import.ndjson
+    awk 'NR=={{N}}' /srv/data/import.ndjson
+    ```
+
+- id: d-csv-columns
+  skill: text-processing
+  difficulty: 1
+  persona: ana
+  channel: data
+  host: app01
+  title: How many columns?
+  message: "@dhan how many columns does /srv/data/wide-export.csv on app01 have?"
+  setup: |
+    f=/srv/data/wide-export.csv; mkdir -p /srv/data; n=$((RANDOM % 30 + 8))
+    seq -s, -f 'col%g' $n > $f; for i in $(seq 20); do seq -s, $n >> $f; done
+  expect: "head -1 /srv/data/wide-export.csv | awk -F, '{print NF}'"
+  answer: number
+  extract: "the number of columns"
+  hints:
+    - "Look at the header line and count the fields."
+    - "awk's NF is the number of fields on the line."
+    - "head -1 /srv/data/wide-export.csv | awk -F, '{print NF}'"
+  solution: |
+    ```bash
+    head -1 /srv/data/wide-export.csv | awk -F, '{print NF}'
+    head -1 /srv/data/wide-export.csv | tr ',' '\n' | wc -l
+    head -1 /srv/data/wide-export.csv | tr ',' '\n' | cat -n      # numbered column names
+    ```
+
+- id: d-unique-hosts-ci
+  skill: text-processing
+  difficulty: 2
+  persona: leah
+  channel: netops
+  host: app01
+  title: Distinct hostnames (case-insensitive)
+  message: "@dhan /srv/data/inventory.txt on app01 has one hostname per line but people typed them in random case (App01, APP01…). how many distinct hosts really?"
+  setup: |
+    f=/srv/data/inventory.txt; mkdir -p /srv/data; : > $f; n=$((RANDOM % 15 + 5))
+    for i in $(seq 120); do h="node$((RANDOM % n))"; case $((RANDOM % 3)) in 0) echo "$h";; 1) echo "${h^^}";; 2) echo "${h^}";; esac; done >> $f
+  expect: "tr '[:upper:]' '[:lower:]' < /srv/data/inventory.txt | sort -u | wc -l"
+  answer: number
+  extract: "the number of distinct hosts"
+  hints:
+    - "Normalize the case first, then deduplicate."
+    - "`tr '[:upper:]' '[:lower:]'` lowercases; or `sort -fu` (fold case)."
+    - "tr A-Z a-z < /srv/data/inventory.txt | sort -u | wc -l"
+  solution: |
+    ```bash
+    tr '[:upper:]' '[:lower:]' < /srv/data/inventory.txt | sort -u | wc -l
+    sort -fu /srv/data/inventory.txt | wc -l
+    ```
+
+- id: d-regular-users
+  skill: users
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: app01
+  title: How many human accounts?
+  message: "@dhan how many regular (human) accounts exist on app01? UID 1000 or above, excluding nobody (65534)."
+  setup: |
+    for u in tmpuser1 tmpuser2; do id $u >/dev/null 2>&1 || useradd -m $u; done
+  expect: "awk -F: '$3 >= 1000 && $3 != 65534' /etc/passwd | wc -l"
+  answer: number
+  extract: "the number of accounts"
+  hints:
+    - "/etc/passwd field 3 is the UID; fields are separated by ':'."
+    - "`awk -F: '$3 >= 1000 && $3 != 65534'`"
+    - "awk -F: '$3>=1000 && $3!=65534 {print $1}' /etc/passwd"
+  solution: |
+    ```bash
+    awk -F: '$3 >= 1000 && $3 != 65534 {print $1}' /etc/passwd
+    awk -F: '$3 >= 1000 && $3 != 65534' /etc/passwd | wc -l
+    ```
+
+- id: d-sed-replace-one
+  skill: text-processing
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: Flip a config value
+  message: "can you change `debug = true` to `debug = false` in /etc/darkroom/app.ini on app01? nothing else pls"
+  setup: |
+    printf '[app]\nname = darkroom\ndebug = true\nworkers = 4\n# debug = true was set for incident 42\n' > /etc/darkroom/app.ini
+  checks:
+    - ["grep -qx 'debug = false' /etc/darkroom/app.ini", "debug isn't false yet"]
+    - ["! grep -qx 'debug = true' /etc/darkroom/app.ini", "there's still an active 'debug = true' line"]
+    - ["grep -q '^# debug = true was set' /etc/darkroom/app.ini && grep -qx 'workers = 4' /etc/darkroom/app.ini", "other lines (like the comment) got changed too"]
+  solve: "sed -i 's/^debug = true$/debug = false/' /etc/darkroom/app.ini"
+  hints:
+    - "sed can edit a file in place."
+    - "Anchor the pattern so the comment line doesn't change: `^debug = true$`."
+    - "sudo sed -i 's/^debug = true$/debug = false/' /etc/darkroom/app.ini"
+  solution: |
+    ```bash
+    sudo sed -i 's/^debug = true$/debug = false/' /etc/darkroom/app.ini
+    grep -n debug /etc/darkroom/app.ini
+    ```
+    Without `^`, the comment `# debug = true was set...` would be edited too.
+
+- id: d-tail-errors-live
+  skill: logs
+  difficulty: 1
+  persona: kofi
+  channel: platform
+  host: app01
+  title: Last request in the log
+  message: "hey @dhan 🙌 what's the request id in the very LAST line of /var/log/darkroom/requests.log on app01?"
+  setup: |
+    f=/var/log/darkroom/requests.log; : > $f
+    for i in $(seq 300); do echo "$(date +%T) GET /x id=rq$(printf %06x $((RANDOM*13+i)))"; done >> $f
+  expect: "tail -1 /var/log/darkroom/requests.log | grep -o 'rq[0-9a-f]*'"
+  answer: regex
+  extract: "the request id"
+  hints:
+    - "Print just the end of the file."
+    - "`tail -n 1` (or `tail -1`); `tail -f` follows it live."
+    - "tail -1 /var/log/darkroom/requests.log"
+  solution: |
+    ```bash
+    tail -1 /var/log/darkroom/requests.log
+    tail -f /var/log/darkroom/requests.log      # follow live, Ctrl-C to stop
+    ```

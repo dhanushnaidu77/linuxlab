@@ -1,0 +1,19 @@
+id: missing-group-membership
+title: Add a user to a group (without breaking the others)
+skills: [users, permissions]
+difficulty: 2
+channel: backend
+persona: tom
+targets: [app01]
+vars:
+  USER: { pick: [noah, tariq, hana] }
+message: |
+  @dhan {{USER}} can't read /srv/deploy on app01 ("permission denied"), but everyone else on the team can. can you fix it?
+  they're already in a bunch of groups, don't mess those up pls
+secret_context: |
+  /srv/deploy is group-owned by "deployers" (2750). {{USER}} is in groups devs, docker-ish "builders" and "oncall" but not deployers.
+  Fix: usermod -aG deployers {{USER}}. The classic mistake is usermod -G deployers (without -a), which REMOVES the other groups.
+hints:
+  - "Compare the directory's group with the user's groups (`ls -ld`, `id`)."
+  - "Add a supplementary group with usermod — and mind the flag that makes it *append* rather than *replace*."
+  - "sudo usermod -aG deployers {{USER}} && id {{USER}}"

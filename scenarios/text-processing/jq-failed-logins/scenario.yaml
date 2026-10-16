@@ -1,0 +1,19 @@
+id: jq-failed-logins
+title: Who has the most failed logins?
+skills: [text-processing]
+difficulty: 3
+channel: platform
+persona: sam
+targets: [app01]
+vars:
+  TOP: { from_setup: true }
+message: |
+  @dhan /var/log/darkroom/auth.jsonl on app01 is JSON lines from the login service. which username has the most FAILED logins?
+secret_context: |
+  Each line is a JSON object: {"ts":..., "user":..., "result":"success"|"failure", "ip":...}. {{TOP}} has the most failures.
+  Note another user has the most events overall (mostly successes), so counting all lines per user gives the wrong answer.
+answer: { type: exact, extract: "the username", value: "{{TOP}}" }
+hints:
+  - "It's JSON per line — there's a standard command-line JSON processor on the box."
+  - "`jq -r 'select(.result==\"failure\") | .user'` prints failing usernames; then count them (sort | uniq -c | sort -rn)."
+  - "jq -r 'select(.result==\"failure\") | .user' /var/log/darkroom/auth.jsonl | sort | uniq -c | sort -rn | head -3"

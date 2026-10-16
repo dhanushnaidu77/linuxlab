@@ -1,0 +1,19 @@
+id: zombie-horde
+title: Hundreds of zombie processes
+skills: [processes]
+difficulty: 3
+channel: platform
+persona: marcus
+targets: [app01]
+vars: {}
+message: |
+  @dhan monitoring says app01 has a growing pile of zombie (defunct) processes. kill -9 on them does nothing, obviously.
+  deal with it. and tell me what caused it.
+secret_context: |
+  A parent process "job-dispatcher" (a python script) forks short-lived children every second and never wait()s on them,
+  so they stay <defunct>. Zombies can't be killed; their parent must reap them or die (then init adopts and reaps them).
+  Fix: kill (or restart) the parent job-dispatcher. kestrel/darkroom-api must keep running.
+hints:
+  - "A zombie is already dead — it's waiting for its parent to collect its exit status. Who is the parent?"
+  - "`ps -eo pid,ppid,stat,comm | grep -w Z` shows zombies and their PPID. Look at that parent process."
+  - "ps -o ppid= -p <zombie_pid>  →  sudo kill <ppid>   (init then reaps all the zombies)"

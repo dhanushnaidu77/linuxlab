@@ -1,0 +1,19 @@
+id: distinct-error-codes
+title: How many different error codes?
+skills: [text-processing, logs]
+difficulty: 2
+channel: backend
+persona: tom
+targets: [app01]
+vars:
+  N: { from_setup: true }
+message: |
+  @dhan for the bug triage: how many DIFFERENT error codes (like E1234) show up in /var/log/darkroom/worker.log on app01?
+  not how many errors, how many distinct codes
+secret_context: |
+  The log contains many lines with codes like "code=E1042" in varying positions; there are {{N}} distinct codes.
+answer: { type: number, extract: "the number of distinct error codes", value: "{{N}}" }
+hints:
+  - "Extract only the code from each line, then deduplicate."
+  - "`grep -o 'E[0-9]\\{4\\}'` prints only the matching part; `sort -u | wc -l` counts unique values."
+  - "grep -oE 'E[0-9]{4}' /var/log/darkroom/worker.log | sort -u | wc -l"

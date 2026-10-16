@@ -1,0 +1,1 @@
+on app01 'mkdir -p /etc/systemd/system/ingest.service.d && printf "[Service]\nLimitNOFILE=4096\n" > /etc/systemd/system/ingest.service.d/limits.conf && systemctl daemon-reload && systemctl restart ingest && sleep 1.5'

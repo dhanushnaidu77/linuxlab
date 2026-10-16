@@ -1,0 +1,20 @@
+id: password-expired
+title: Reset an expired password (force change at login)
+skills: [users]
+difficulty: 2
+channel: it-helpdesk
+persona: raj
+targets: [jump01]
+vars:
+  USER: { pick: [jenny, carlos, hana] }
+message: |
+  Hi @dhan, INC-5033: {{USER}} can't log in to jump01, says the password expired. Please set a temporary password
+  `Welcome-Temp-2026` and make sure they're forced to pick a new one when they log in. Thanks a ton!
+secret_context: |
+  {{USER}} has an expired password (last change long ago, max age 90 days) AND the account itself has an expiry date in the past,
+  so even with a new password they can't log in. Fix: set password, clear the account expiry (usermod -e '' / chage -E -1),
+  and force a change at next login (chage -d 0 / passwd -e).
+hints:
+  - "`chage -l <user>` shows password AND account expiry. Both can block a login."
+  - "Set the password (chpasswd/passwd), remove the account expiry (`chage -E -1`), then force a change (`chage -d 0`)."
+  - "echo '{{USER}}:Welcome-Temp-2026' | sudo chpasswd && sudo chage -E -1 -d 0 {{USER}}"

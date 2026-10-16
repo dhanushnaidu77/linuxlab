@@ -1,0 +1,19 @@
+id: open-files-limit
+title: "Too many open files"
+skills: [processes, systemd]
+difficulty: 3
+channel: backend
+persona: tom
+targets: [app01]
+vars: {}
+message: |
+  @dhan the ingest service on app01 keeps crashing with "Too many open files" 😩 it needs to hold ~2000 files open at once.
+  can you raise the limit for it? it's a systemd service called ingest
+secret_context: |
+  ingest.service runs a python script that opens 2000 files and then idles; it crashes with EMFILE because the unit sets
+  LimitNOFILE=1024. ulimit in a shell or /etc/security/limits.conf does NOT apply to systemd services. Correct: LimitNOFILE=4096
+  (or higher) via a drop-in (systemctl edit ingest) or the unit, daemon-reload, restart.
+hints:
+  - "Check the service's logs and its effective limits. Where do limits for systemd services come from?"
+  - "`cat /proc/<pid>/limits` or `systemctl show ingest -p LimitNOFILE`. limits.conf/ulimit don't apply to services — use LimitNOFILE= in the unit."
+  - "sudo systemctl edit ingest  → [Service] LimitNOFILE=4096 ; sudo systemctl restart ingest"

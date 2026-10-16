@@ -1,0 +1,19 @@
+id: bulk-hostname-replace
+title: Replace the old DB hostname everywhere
+skills: [text-processing, files]
+difficulty: 2
+channel: backend
+persona: tom
+targets: [app01]
+vars:
+  N: { from_setup: true }
+message: |
+  @dhan we decommissioned db-legacy.darkroom.internal. can you replace it with db01.darkroom.internal in every config under
+  /etc/darkroom/conf.d on app01? there's a bunch of files 😵 don't touch anything else in them pls
+secret_context: |
+  {{N}} .conf files under /etc/darkroom/conf.d (some in subdirectories) mention db-legacy.darkroom.internal, sometimes several times
+  per line. Other files must be unchanged, and similar names like "db-legacy-replica.darkroom.internal" must NOT be changed.
+hints:
+  - "grep can list which files contain a string recursively; sed can edit files in place."
+  - "`grep -rl` finds the files; `sed -i 's/old/new/g'` edits them. Escape the dots and watch out for the similar *-replica name."
+  - "grep -rl 'db-legacy\\.darkroom' /etc/darkroom/conf.d | xargs sudo sed -i 's/db-legacy\\.darkroom\\.internal/db01.darkroom.internal/g'"

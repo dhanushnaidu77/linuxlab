@@ -1,0 +1,376 @@
+# Habit drills: finding, inspecting and killing processes.
+# Fake workers are tiny bash scripts in /usr/local/bin so `ps`/`pgrep` show a meaningful name.
+
+- id: d-kill-by-name
+  skill: processes
+  difficulty: 1
+  persona: ana
+  channel: data
+  host: app01
+  title: Kill all the stuck exports
+  message: "@dhan the csv-export jobs on app01 are stuck (there are a few of them). kill them all pls, I'll rerun"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 2; done\n' > /usr/local/bin/csv-export; chmod 755 /usr/local/bin/csv-export
+    pkill -x csv-export; for i in $(seq $((RANDOM % 4 + 2))); do setsid -f /usr/local/bin/csv-export >/dev/null 2>&1 < /dev/null; done; sleep 0.3
+  checks:
+    - ["! pgrep -x csv-export", "there are still csv-export processes running"]
+    - ["systemctl is-active -q darkroom-api", "darkroom-api died too?!"]
+  solve: "pkill -x csv-export; sleep 0.3"
+  cleanup: "pkill -x csv-export; rm -f /usr/local/bin/csv-export"
+  hints:
+    - "Find every process with that name and signal them all at once."
+    - "`pgrep -a csv-export` to see them; `pkill` kills by name (-x = exact name)."
+    - "sudo pkill -x csv-export"
+  solution: |
+    ```bash
+    pgrep -a csv-export          # look first
+    sudo pkill -x csv-export     # TERM all of them
+    sudo killall csv-export      # alternative
+    ```
+
+- id: d-kill-by-user
+  skill: processes
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: app01
+  title: Kill everything the intern left running
+  message: "@dhan the intern account `intern` still has processes running on app01 after their last day. kill all of THEIR processes. nobody else's."
+  setup: |
+    id intern >/dev/null 2>&1 || useradd -m -s /bin/bash intern
+    printf '#!/bin/bash\nwhile :; do sleep 3; done\n' > /usr/local/bin/notebook; chmod 755 /usr/local/bin/notebook
+    pkill -u intern; for i in $(seq $((RANDOM % 3 + 2))); do setsid -f runuser -u intern -- /usr/local/bin/notebook >/dev/null 2>&1 < /dev/null; done
+    setsid -f runuser -u darkroom -- /usr/local/bin/notebook >/dev/null 2>&1 < /dev/null; sleep 0.4
+  checks:
+    - ["! pgrep -u intern", "intern still has processes running"]
+    - ["pgrep -u darkroom -x notebook", "you killed darkroom's notebook process too — only intern's!"]
+  solve: "pkill -u intern; sleep 0.3"
+  cleanup: "pkill -x notebook; rm -f /usr/local/bin/notebook"
+  hints:
+    - "pkill/pgrep can match on the owning user."
+    - "`pgrep -u intern -a` to list, `pkill -u intern` to kill."
+    - "sudo pkill -u intern"
+  solution: |
+    ```bash
+    pgrep -u intern -a
+    sudo pkill -u intern
+    sudo loginctl terminate-user intern     # also ends their sessions (systemd)
+    ```
+
+- id: d-kill-port-holder
+  skill: processes
+  difficulty: 2
+  persona: tom
+  channel: backend
+  host: app01
+  title: Free up a port
+  vars:
+    PORT: { range: [7000, 7999] }
+  message: "something is sitting on port {{PORT}} on app01 and my service can't bind it 😩 kill whatever is listening there?"
+  setup: |
+    printf '#!/usr/bin/python3\nimport socket,time\ns=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("0.0.0.0", %s)); s.listen()\nwhile True: time.sleep(60)\n' $PORT > /usr/local/bin/old-sidecar
+    chmod 755 /usr/local/bin/old-sidecar; pkill -x old-sidecar; setsid -f /usr/local/bin/old-sidecar >/dev/null 2>&1 < /dev/null; sleep 0.5
+  checks:
+    - ["! ss -ltnH \"sport = :$PORT\" | grep -q .", "port {{PORT}} is still taken"]
+  solve: "kill $(ss -ltnpH \"sport = :$PORT\" | grep -o 'pid=[0-9]*' | cut -d= -f2); sleep 0.3"
+  cleanup: "pkill -x old-sidecar; rm -f /usr/local/bin/old-sidecar"
+  hints:
+    - "Find which PID owns the listening socket."
+    - "`sudo ss -ltnp 'sport = :PORT'` shows users:((\"name\",pid=N...)); or `sudo lsof -i :PORT`; or `fuser -k PORT/tcp`."
+    - "sudo fuser -k {{PORT}}/tcp"
+  solution: |
+    ```bash
+    sudo ss -ltnp 'sport = :{{PORT}}'
+    sudo kill <pid>
+    sudo fuser -k {{PORT}}/tcp            # find + kill in one
+    ```
+
+- id: d-kill-memory-hog
+  skill: processes
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Memory hog
+  message: "@dhan something on app01 is hoarding memory. find the process using the most RAM and kill it. NOT darkroom-api."
+  setup: |
+    n=$(shuf -n1 -e cache-warmer img-index mem-test)
+    printf '#!/usr/bin/python3\nimport time\nb = bytearray(300*1024*1024)\nfor i in range(0, len(b), 4096): b[i] = 1\nwhile True: time.sleep(60)\n' > /usr/local/bin/$n
+    chmod 755 /usr/local/bin/$n; echo $n > /root/.hog; setsid -f /usr/local/bin/$n >/dev/null 2>&1 < /dev/null; sleep 2
+  checks:
+    - ["! pgrep -x $(cat /root/.hog)", "the memory hog is still running"]
+    - ["systemctl is-active -q darkroom-api", "darkroom-api is down — wrong process!"]
+  solve: "kill $(ps -eo pid --sort=-rss | sed -n 2p); sleep 0.5"
+  cleanup: "pkill -x $(cat /root/.hog 2>/dev/null) 2>/dev/null; rm -f /usr/local/bin/$(cat /root/.hog 2>/dev/null) /root/.hog"
+  hints:
+    - "Sort processes by resident memory."
+    - "`ps aux --sort=-rss | head` (RSS = resident memory), or `top` then press M."
+    - "ps -eo pid,rss,comm --sort=-rss | head -3"
+  solution: |
+    ```bash
+    ps -eo pid,user,rss,%mem,comm --sort=-rss | head -5
+    sudo kill <pid>
+    free -h                         # watch "available" go back up
+    ```
+
+- id: d-count-user-procs
+  skill: processes
+  difficulty: 1
+  persona: kofi
+  channel: platform
+  host: app01
+  title: How many processes does a user run?
+  message: "hey @dhan 🙌 how many processes is the `etl` user running on app01 right now?"
+  setup: |
+    id etl >/dev/null 2>&1 || useradd -m etl
+    printf '#!/bin/bash\nwhile :; do sleep 5; done\n' > /usr/local/bin/etl-step; chmod 755 /usr/local/bin/etl-step
+    pkill -u etl; sleep 0.2; for i in $(seq $((RANDOM % 7 + 2))); do setsid -f runuser -u etl -- /usr/local/bin/etl-step >/dev/null 2>&1 < /dev/null; done; sleep 0.5
+  expect: "pgrep -c -u etl"
+  answer: number
+  extract: "the number of processes"
+  cleanup: "pkill -u etl; rm -f /usr/local/bin/etl-step"
+  hints:
+    - "Filter the process list by user and count."
+    - "`pgrep -c -u etl`, or `ps -u etl --no-headers | wc -l`."
+    - "pgrep -c -u etl"
+  solution: |
+    ```bash
+    pgrep -c -u etl
+    ps -u etl -o pid,etime,cmd
+    ```
+
+- id: d-oldest-worker
+  skill: processes
+  difficulty: 2
+  persona: tom
+  channel: backend
+  host: app01
+  title: Oldest worker PID
+  message: "there are several queue-runner processes on app01. which one has been running the LONGEST? I need its PID"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 4; done\n' > /usr/local/bin/queue-runner; chmod 755 /usr/local/bin/queue-runner
+    pkill -x queue-runner; for i in $(seq $((RANDOM % 3 + 3))); do setsid -f /usr/local/bin/queue-runner >/dev/null 2>&1 < /dev/null; sleep 1.1; done
+  expect: "pgrep -o -x queue-runner"
+  answer: number
+  extract: "the PID"
+  cleanup: "pkill -x queue-runner; rm -f /usr/local/bin/queue-runner"
+  hints:
+    - "ps can show how long each process has been running, or sort by start time."
+    - "`ps -o pid,etime,cmd -C queue-runner --sort=start_time`; `pgrep -o` = oldest, `-n` = newest."
+    - "pgrep -o -x queue-runner"
+  solution: |
+    ```bash
+    ps -C queue-runner -o pid,lstart,etime --sort=start_time
+    pgrep -o -x queue-runner      # oldest
+    pgrep -n -x queue-runner      # newest
+    ```
+
+- id: d-parent-pid
+  skill: processes
+  difficulty: 2
+  persona: kofi
+  channel: platform
+  host: app01
+  title: Who started this process?
+  message: "hey 🙌 there's a `pdf-render` process on app01. what's the PID of its PARENT process?"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 4; done\n' > /usr/local/bin/pdf-render; chmod 755 /usr/local/bin/pdf-render
+    printf '#!/bin/bash\n/usr/local/bin/pdf-render &\nwhile :; do sleep 4; done\n' > /usr/local/bin/render-supervisor; chmod 755 /usr/local/bin/render-supervisor
+    pkill -x render-supervisor; pkill -x pdf-render; setsid -f /usr/local/bin/render-supervisor >/dev/null 2>&1 < /dev/null; sleep 0.5
+  expect: "ps -o ppid= -p $(pgrep -x pdf-render) | tr -d ' '"
+  answer: number
+  extract: "the parent PID"
+  cleanup: "pkill -x render-supervisor; pkill -x pdf-render; rm -f /usr/local/bin/pdf-render /usr/local/bin/render-supervisor"
+  hints:
+    - "Every process records its parent's PID (PPID)."
+    - "`ps -o pid,ppid,cmd -p <pid>`, or `ps -ef` (PPID column), or `pstree -p`."
+    - "ps -o ppid= -p $(pgrep -x pdf-render)"
+  solution: |
+    ```bash
+    ps -o pid,ppid,cmd -p $(pgrep -x pdf-render)
+    pstree -ps $(pgrep -x pdf-render)          # the whole ancestry
+    ```
+
+- id: d-proc-args
+  skill: processes
+  difficulty: 1
+  persona: leah
+  channel: netops
+  host: app01
+  title: Which region is the sync agent using?
+  message: "@dhan the sync-agent on app01 was started with a --region flag. what region is it using?"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 4; done\n' > /usr/local/bin/sync-agent; chmod 755 /usr/local/bin/sync-agent
+    pkill -f '[s]ync-agent'; r=$(shuf -n1 -e eu-west-1 us-east-2 ap-south-1 eu-central-1)
+    setsid -f /usr/local/bin/sync-agent --verbose --region $r --batch 50 >/dev/null 2>&1 < /dev/null; sleep 0.3
+  expect: "ps -o args= -C sync-agent | grep -o -- '--region [^ ]*' | cut -d' ' -f2"
+  answer: exact
+  extract: "the region"
+  cleanup: "pkill -f '[s]ync-agent'; rm -f /usr/local/bin/sync-agent"
+  hints:
+    - "The full command line of a running process is visible."
+    - "`ps -o args -C sync-agent`, `pgrep -a sync-agent`, or `cat /proc/<pid>/cmdline | tr '\\0' ' '`."
+    - "pgrep -a sync-agent"
+  solution: |
+    ```bash
+    pgrep -a sync-agent
+    ps -o pid,args -C sync-agent
+    ```
+
+- id: d-proc-cwd
+  skill: processes
+  difficulty: 2
+  persona: tom
+  channel: backend
+  host: app01
+  title: Where is that process running from?
+  message: "which directory is the `watcher` process on app01 running in (its working directory)?"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 4; done\n' > /usr/local/bin/watcher; chmod 755 /usr/local/bin/watcher
+    pkill -x watcher; d=/srv/$(shuf -n1 -e watch-a watch-b jobs/incoming spool/w$RANDOM); mkdir -p $d
+    (cd $d && setsid -f /usr/local/bin/watcher >/dev/null 2>&1 < /dev/null); sleep 0.3
+  expect: "readlink /proc/$(pgrep -x watcher)/cwd"
+  answer: exact
+  extract: "the directory path"
+  cleanup: "pkill -x watcher; rm -f /usr/local/bin/watcher"
+  hints:
+    - "/proc/<pid>/ has a lot of info about each process."
+    - "/proc/<pid>/cwd is a symlink to its current directory. Or `pwdx <pid>`, or `lsof -p <pid> | grep cwd`."
+    - "sudo readlink /proc/$(pgrep -x watcher)/cwd"
+  solution: |
+    ```bash
+    sudo readlink /proc/$(pgrep -x watcher)/cwd
+    pwdx $(pgrep -x watcher)
+    ```
+
+- id: d-proc-open-file
+  skill: processes
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Which file is it writing to?
+  message: "@dhan `audit-logger` on app01 is writing to some log file and nobody knows which. find it. full path."
+  setup: |
+    pkill -x audit-logger; f=/var/tmp/$(shuf -n1 -e audit au-sec trail)-$RANDOM.log
+    printf '#!/bin/bash\nexec 7>>%s\nwhile :; do echo "$(date) audit" >&7; sleep 2; done\n' "$f" > /usr/local/bin/audit-logger; chmod 755 /usr/local/bin/audit-logger
+    setsid -f /usr/local/bin/audit-logger >/dev/null 2>&1 < /dev/null; sleep 0.4
+  expect: "ls -l /proc/$(pgrep -x audit-logger)/fd | grep -o '/var/tmp/[^ ]*\\.log'"
+  answer: exact
+  extract: "the file path"
+  cleanup: "pkill -x audit-logger; rm -f /usr/local/bin/audit-logger /var/tmp/*-*.log"
+  hints:
+    - "A process's open files are listed under /proc."
+    - "`ls -l /proc/<pid>/fd` shows each file descriptor → path. `lsof -p <pid>` too."
+    - "sudo ls -l /proc/$(pgrep -x audit-logger)/fd"
+  solution: |
+    ```bash
+    sudo ls -l /proc/$(pgrep -x audit-logger)/fd
+    sudo lsof -p $(pgrep -x audit-logger) | grep -v ' mem '
+    ```
+
+- id: d-proc-env
+  skill: processes
+  difficulty: 2
+  persona: tom
+  channel: backend
+  host: app01
+  title: What env var did it start with?
+  message: "what's the value of the DARKROOM_TENANT env var in the running `tenant-worker` process on app01? (not in my shell, in the process)"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 4; done\n' > /usr/local/bin/tenant-worker; chmod 755 /usr/local/bin/tenant-worker
+    pkill -x tenant-worker; t=$(shuf -n1 -e acme globex initech umbrella)-$((RANDOM % 90 + 10))
+    DARKROOM_TENANT=$t setsid -f /usr/local/bin/tenant-worker >/dev/null 2>&1 < /dev/null; sleep 0.3
+  expect: "tr '\\0' '\\n' < /proc/$(pgrep -x tenant-worker)/environ | grep '^DARKROOM_TENANT=' | cut -d= -f2"
+  answer: exact
+  extract: "the value"
+  cleanup: "pkill -x tenant-worker; rm -f /usr/local/bin/tenant-worker"
+  hints:
+    - "Each process's environment (as it was at start) is readable under /proc."
+    - "/proc/<pid>/environ is NUL-separated: pipe it through `tr '\\0' '\\n'`."
+    - "sudo cat /proc/$(pgrep -x tenant-worker)/environ | tr '\\0' '\\n' | grep TENANT"
+  solution: |
+    ```bash
+    sudo cat /proc/$(pgrep -x tenant-worker)/environ | tr '\0' '\n' | grep DARKROOM_TENANT
+    ```
+    Note: it's the environment at exec time — later changes inside the process aren't reflected.
+
+- id: d-restart-nginx
+  skill: systemd
+  difficulty: 1
+  persona: kofi
+  channel: platform
+  host: web01
+  title: Restart nginx (properly)
+  message: "hey 🙌 could you restart nginx on web01? config change from earlier needs a full restart, not a reload"
+  setup: |
+    systemctl restart nginx; systemctl show -p MainPID --value nginx > /root/.nginx.pid
+  checks:
+    - ["systemctl is-active -q nginx", "nginx isn't running now 😬"]
+    - ["[ \"$(systemctl show -p MainPID --value nginx)\" != \"$(cat /root/.nginx.pid)\" ]", "nginx has the same main PID as before — it wasn't restarted"]
+  solve: "systemctl restart nginx"
+  cleanup: "rm -f /root/.nginx.pid"
+  hints:
+    - "Services are managed with systemctl."
+    - "`systemctl restart <unit>`; check with `systemctl status`."
+    - "sudo systemctl restart nginx && systemctl status nginx --no-pager"
+  solution: |
+    ```bash
+    sudo nginx -t && sudo systemctl restart nginx
+    systemctl status nginx --no-pager
+    ```
+    `reload` keeps the master process (same PID) and re-reads config; `restart` stops and starts it.
+
+- id: d-sigterm-ignored
+  skill: processes
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Process won't die
+  message: "@dhan `legacy-daemon` on app01 won't stop. kill it. yes, by any means."
+  setup: |
+    printf '#!/bin/bash\ntrap "" TERM INT HUP\nwhile :; do sleep 1; done\n' > /usr/local/bin/legacy-daemon; chmod 755 /usr/local/bin/legacy-daemon
+    pkill -9 -x legacy-daemon; setsid -f /usr/local/bin/legacy-daemon >/dev/null 2>&1 < /dev/null; sleep 0.3
+  checks:
+    - ["! pgrep -x legacy-daemon", "legacy-daemon is still running"]
+  solve: "pkill -9 -x legacy-daemon; sleep 0.3"
+  cleanup: "pkill -9 -x legacy-daemon; rm -f /usr/local/bin/legacy-daemon"
+  hints:
+    - "Some processes ignore the polite signal. Try it first and check — then escalate."
+    - "`kill <pid>` sends TERM (catchable). `kill -9` sends KILL, which can't be caught or ignored."
+    - "sudo pkill -9 -x legacy-daemon"
+  solution: |
+    ```bash
+    sudo pkill -x legacy-daemon; sleep 2; pgrep -x legacy-daemon   # still there: it traps TERM
+    sudo pkill -9 -x legacy-daemon
+    ```
+    Order of escalation: TERM → (wait) → KILL. Only a process in uninterruptible sleep (state D) survives -9.
+
+- id: d-pkill-pattern
+  skill: processes
+  difficulty: 2
+  persona: ana
+  channel: data
+  host: app01
+  title: Kill only the daily reports
+  message: "@dhan kill the `report-gen --daily` processes on app01 but NOT the `report-gen --hourly` ones, those are fine"
+  setup: |
+    printf '#!/bin/bash\nwhile :; do sleep 3; done\n' > /usr/local/bin/report-gen; chmod 755 /usr/local/bin/report-gen
+    pkill -x report-gen; for i in 1 2 3; do setsid -f /usr/local/bin/report-gen --daily --part $i >/dev/null 2>&1 < /dev/null; done
+    for i in 1 2; do setsid -f /usr/local/bin/report-gen --hourly --part $i >/dev/null 2>&1 < /dev/null; done; sleep 0.3
+  checks:
+    - ["! pgrep -f 'report-gen --daily'", "daily report-gen processes are still running"]
+    - ["[ $(pgrep -fc 'report-gen --hourly') -eq 2 ]", "you killed the hourly ones too!"]
+  solve: "pkill -f 'report-gen --daily'; sleep 0.3"
+  cleanup: "pkill -x report-gen; rm -f /usr/local/bin/report-gen"
+  hints:
+    - "The process name is the same; the arguments differ."
+    - "`pgrep -af` / `pkill -f` match against the full command line."
+    - "pgrep -af 'report-gen --daily'   then   sudo pkill -f 'report-gen --daily'"
+  solution: |
+    ```bash
+    pgrep -af report-gen                     # see all, with args
+    sudo pkill -f 'report-gen --daily'
+    ```
+    Always `pgrep` with the same pattern before `pkill -f` — full-command-line patterns match more than you expect.

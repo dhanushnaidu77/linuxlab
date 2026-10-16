@@ -1,0 +1,320 @@
+# Habit drills: reading and fixing permissions & ownership.
+
+- id: d-perm-octal
+  skill: permissions
+  difficulty: 1
+  persona: sam
+  channel: platform
+  host: app01
+  title: Permissions of a secret file (octal)
+  message: "@dhan what are the permissions of /etc/darkroom/payment.key on app01, in octal (like 640)?"
+  setup: |
+    echo "k" > /etc/darkroom/payment.key; chmod $(shuf -n1 -e 600 640 644 660 664 400 440) /etc/darkroom/payment.key
+  expect: "stat -c %a /etc/darkroom/payment.key"
+  answer: number
+  extract: "the octal mode"
+  hints:
+    - "`ls -l` shows symbolic permissions (rw-r-----); you can convert, or ask for octal directly."
+    - "`stat -c %a <file>` prints the octal mode. r=4 w=2 x=1 per group."
+    - "stat -c '%a %U:%G' /etc/darkroom/payment.key"
+  solution: |
+    ```bash
+    stat -c '%a %A %U:%G' /etc/darkroom/payment.key      # 640 -rw-r----- root:root
+    ```
+    Convert by hand: each triplet rwx = 4+2+1. `rw-` = 6, `r--` = 4, `---` = 0.
+
+- id: d-perm-owner
+  skill: permissions
+  difficulty: 1
+  persona: raj
+  channel: it-helpdesk
+  host: app01
+  title: Who owns this file?
+  message: "Hi @dhan, who owns /srv/shared/q4-plan.xlsx on app01? (the user, not the group) thanks a ton!"
+  setup: |
+    for u in jenny omar grace carlos; do id $u >/dev/null 2>&1 || useradd -m $u; done
+    mkdir -p /srv/shared; touch /srv/shared/q4-plan.xlsx; chown $(shuf -n1 -e jenny omar grace carlos):$(shuf -n1 -e jenny omar grace carlos) /srv/shared/q4-plan.xlsx
+  expect: "stat -c %U /srv/shared/q4-plan.xlsx"
+  answer: exact
+  extract: "the owner's username"
+  hints:
+    - "`ls -l` shows owner and group (in that order)."
+    - "Third column of `ls -l` is the owner, fourth the group. `stat -c %U` prints only the owner."
+    - "ls -l /srv/shared/q4-plan.xlsx"
+  solution: |
+    ```bash
+    ls -l /srv/shared/q4-plan.xlsx        # -rw-r--r-- 1 OWNER GROUP ...
+    stat -c '%U %G' /srv/shared/q4-plan.xlsx
+    ```
+
+- id: d-chmod-750
+  skill: permissions
+  difficulty: 1
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Script runnable by owner and group only
+  message: "@dhan /opt/darkroom/bin/rotate.sh on app01: owner and group can run it, others get nothing. fix the mode."
+  setup: |
+    mkdir -p /opt/darkroom/bin; printf '#!/bin/bash\necho rotated\n' > /opt/darkroom/bin/rotate.sh; chmod $(shuf -n1 -e 644 777 600 666) /opt/darkroom/bin/rotate.sh
+  checks:
+    - ["[ $(stat -c %a /opt/darkroom/bin/rotate.sh) = 750 ]", "rotate.sh isn't rwxr-x--- (750) yet"]
+  solve: "chmod 750 /opt/darkroom/bin/rotate.sh"
+  hints:
+    - "Owner rwx, group r-x, others ---."
+    - "rwx=7, r-x=5, ---=0."
+    - "sudo chmod 750 /opt/darkroom/bin/rotate.sh"
+  solution: |
+    ```bash
+    sudo chmod 750 /opt/darkroom/bin/rotate.sh       # or: chmod u=rwx,g=rx,o= rotate.sh
+    ```
+
+- id: d-dirs-755-files-644
+  skill: permissions
+  difficulty: 2
+  persona: tom
+  channel: backend
+  host: web01
+  title: Fix a messed-up assets tree
+  message: "someone ran chmod -R 777 on /var/www/darkroom/assets on web01 🤦 can you set it back to normal? dirs 755, files 644"
+  setup: |
+    rm -rf /var/www/darkroom/assets; mkdir -p /var/www/darkroom/assets/{css,js,img/icons}
+    for d in css js img img/icons; do for i in 1 2 3; do echo x > /var/www/darkroom/assets/$d/f$i.$d; done; done
+    chmod -R 777 /var/www/darkroom/assets
+  checks:
+    - ["[ -z \"$(find /var/www/darkroom/assets -type d ! -perm 755)\" ]", "some directories aren't 755"]
+    - ["[ -z \"$(find /var/www/darkroom/assets -type f ! -perm 644)\" ]", "some files aren't 644"]
+  solve: |
+    find /var/www/darkroom/assets -type d -exec chmod 755 {} +
+    find /var/www/darkroom/assets -type f -exec chmod 644 {} +
+  hints:
+    - "One chmod -R can't give dirs and files different modes. Treat them separately."
+    - "`find -type d -exec chmod 755 {} +` and the same with `-type f` and 644."
+    - "find /var/www/darkroom/assets -type d -exec chmod 755 {} + ; find ... -type f -exec chmod 644 {} +"
+  solution: |
+    ```bash
+    sudo find /var/www/darkroom/assets -type d -exec chmod 755 {} +
+    sudo find /var/www/darkroom/assets -type f -exec chmod 644 {} +
+    # or in one go with symbolic X: chmod -R u=rwX,go=rX  (X = x only for dirs)
+    ```
+
+- id: d-chown-recursive
+  skill: permissions
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: App data owned by the wrong user
+  message: "the darkroom service can't write to /srv/app-data on app01 — it's all owned by root. make the whole tree darkroom:darkroom pls"
+  setup: |
+    rm -rf /srv/app-data; mkdir -p /srv/app-data/{cache,uploads/2026}; touch /srv/app-data/{cache,uploads/2026}/f{1,2,3}; chown -R root:root /srv/app-data
+  checks:
+    - ["[ -z \"$(find /srv/app-data ! -user darkroom -o ! -group darkroom)\" ]", "some files/dirs under /srv/app-data still aren't darkroom:darkroom"]
+  solve: "chown -R darkroom:darkroom /srv/app-data"
+  hints:
+    - "Change owner AND group, recursively."
+    - "`chown -R user:group <dir>`"
+    - "sudo chown -R darkroom:darkroom /srv/app-data"
+  solution: |
+    ```bash
+    sudo chown -R darkroom:darkroom /srv/app-data
+    sudo -u darkroom touch /srv/app-data/cache/test && echo writable
+    ```
+
+- id: d-world-writable-count
+  skill: permissions
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: web01
+  title: Count world-writable files
+  message: "@dhan audit: how many world-writable FILES are under /srv/web on web01?"
+  setup: |
+    rm -rf /srv/web; mkdir -p /srv/web/{a,b,c}
+    for i in $(seq 25); do f=/srv/web/$(shuf -n1 -e a b c)/f$i; echo x > $f; chmod $(shuf -n1 -e 644 644 664 666 777 640) $f; done
+  expect: "find /srv/web -type f -perm -o+w | wc -l"
+  answer: number
+  extract: "the number of files"
+  hints:
+    - "find can test permission bits."
+    - "`-perm -o+w` (or `-perm -002`) matches files where others have write."
+    - "find /srv/web -type f -perm -o+w | wc -l"
+  solution: |
+    ```bash
+    find /srv/web -type f -perm -o+w | wc -l
+    find /srv/web -type f -perm -o+w -exec chmod o-w {} +     # and fix them
+    ```
+    `-perm -MODE` = all these bits set; `-perm /MODE` = any of these bits set.
+
+- id: d-remove-world-write
+  skill: permissions
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: web01
+  title: Remove world-write everywhere under /srv/web
+  message: "@dhan remove write permission for 'others' from everything under /srv/web on web01. don't change any other bits."
+  setup: |
+    rm -rf /srv/web; mkdir -p /srv/web/{a,b,c}
+    for i in $(seq 25); do f=/srv/web/$(shuf -n1 -e a b c)/f$i; echo x > $f; chmod $(shuf -n1 -e 644 664 666 777 640 755) $f; done
+    find /srv/web -type f -printf '%m %p\n' > /root/.perms-before
+  checks:
+    - ["[ -z \"$(find /srv/web -perm -o+w)\" ]", "some things under /srv/web are still world-writable"]
+    - ["while read m p; do want=$(printf '%o' $((0$m & ~2))); [ \"$(stat -c %a $p)\" = \"$want\" ] || exit 1; done < /root/.perms-before", "other permission bits changed too (I only wanted o-w removed)"]
+  solve: "chmod -R o-w /srv/web"
+  hints:
+    - "Symbolic chmod can remove a single bit without touching the rest."
+    - "`chmod o-w` removes write for others; -R for the tree."
+    - "sudo chmod -R o-w /srv/web"
+  solution: |
+    ```bash
+    sudo chmod -R o-w /srv/web
+    ```
+    Symbolic modes (`u/g/o/a` `+/-/=` `r/w/x`) change only what you name; octal modes overwrite everything.
+
+- id: d-lock-key-600
+  skill: permissions
+  difficulty: 1
+  persona: sam
+  channel: platform
+  host: app01
+  title: "License key: root only"
+  message: "@dhan /etc/darkroom/license.key on app01 must be readable and writable by root ONLY. owner root too."
+  setup: |
+    echo "LIC-$RANDOM" > /etc/darkroom/license.key; id omar >/dev/null 2>&1 || useradd -m omar; chown omar:omar /etc/darkroom/license.key; chmod 644 /etc/darkroom/license.key
+  checks:
+    - ["[ \"$(stat -c '%a %U' /etc/darkroom/license.key)\" = '600 root' ]", "license.key isn't 600 owned by root yet"]
+  solve: "chown root:root /etc/darkroom/license.key && chmod 600 /etc/darkroom/license.key"
+  hints:
+    - "Fix both the owner and the mode."
+    - "`chown root:root` then `chmod 600`."
+    - "sudo chown root:root /etc/darkroom/license.key && sudo chmod 600 /etc/darkroom/license.key"
+  solution: |
+    ```bash
+    sudo chown root:root /etc/darkroom/license.key
+    sudo chmod 600 /etc/darkroom/license.key
+    ```
+
+- id: d-orphan-files
+  skill: permissions
+  difficulty: 2
+  persona: sam
+  channel: platform
+  host: app01
+  title: Files with no owner
+  message: "@dhan after last month's account cleanup, how many files under /srv/projects-old on app01 belong to a user that no longer exists?"
+  setup: |
+    rm -rf /srv/projects-old; mkdir -p /srv/projects-old
+    id ghost >/dev/null 2>&1 && userdel ghost; useradd -M ghost
+    for i in $(seq $((RANDOM % 10 + 3))); do touch /srv/projects-old/g$i; chown ghost /srv/projects-old/g$i; done
+    for i in $(seq 8); do touch /srv/projects-old/r$i; done
+    userdel ghost
+  expect: "find /srv/projects-old -nouser | wc -l"
+  answer: number
+  extract: "the number of files"
+  hints:
+    - "Files keep the numeric UID after the user is deleted. ls shows a number instead of a name."
+    - "find has a test for 'no user with this UID exists'."
+    - "find /srv/projects-old -nouser | wc -l"
+  solution: |
+    ```bash
+    ls -l /srv/projects-old | head       # owner shown as a number, e.g. 1007
+    find /srv/projects-old -nouser | wc -l
+    find / -xdev -nouser -o -nogroup 2>/dev/null     # system-wide audit
+    ```
+
+- id: d-group-write-csv
+  skill: permissions
+  difficulty: 2
+  persona: ana
+  channel: data
+  host: app01
+  title: Group write on the CSVs only
+  message: "@dhan add group write permission to every .csv in /srv/finance on app01. leave the other files alone."
+  setup: |
+    rm -rf /srv/finance; mkdir -p /srv/finance
+    for i in $(seq 6); do echo x > /srv/finance/r$i.csv; echo x > /srv/finance/n$i.txt; done; chmod 644 /srv/finance/*
+  checks:
+    - ["[ -z \"$(find /srv/finance -name '*.csv' ! -perm -g+w)\" ]", "some CSVs still don't have group write"]
+    - ["[ -z \"$(find /srv/finance -name '*.txt' -perm -g+w)\" ]", "the .txt files got group write too"]
+  solve: "chmod g+w /srv/finance/*.csv"
+  hints:
+    - "Symbolic chmod with a glob."
+    - "`chmod g+w *.csv`"
+    - "sudo chmod g+w /srv/finance/*.csv"
+  solution: |
+    ```bash
+    sudo chmod g+w /srv/finance/*.csv
+    ls -l /srv/finance
+    ```
+
+- id: d-count-executables
+  skill: permissions
+  difficulty: 1
+  persona: kofi
+  channel: platform
+  host: app01
+  title: How many executables in the bin dir?
+  message: "hey 🙌 quick inventory: how many files in /opt/darkroom/tools on app01 are executable (by anyone)?"
+  setup: |
+    rm -rf /opt/darkroom/tools; mkdir -p /opt/darkroom/tools
+    for i in $(seq 15); do echo x > /opt/darkroom/tools/t$i; chmod $(shuf -n1 -e 755 644 700 600 750 640) /opt/darkroom/tools/t$i; done
+  expect: "find /opt/darkroom/tools -type f -perm /111 | wc -l"
+  answer: number
+  extract: "the number of files"
+  hints:
+    - "Executable by anyone = any of the three x bits set."
+    - "`find -perm /111` matches if ANY x bit is set (`-perm -111` would require all three)."
+    - "find /opt/darkroom/tools -type f -perm /111 | wc -l"
+  solution: |
+    ```bash
+    find /opt/darkroom/tools -type f -perm /111 | wc -l
+    ls -l /opt/darkroom/tools | grep -c '^-..x\|^-.....x\|^-........x'    # the hard way
+    ```
+
+- id: d-sudo-members
+  skill: users
+  difficulty: 1
+  persona: sam
+  channel: platform
+  host: app01
+  title: Who has sudo?
+  message: "@dhan list the members of the sudo group on app01."
+  setup: |
+    for u in omar grace carlos hana; do id $u >/dev/null 2>&1 || useradd -m $u; gpasswd -d $u sudo >/dev/null 2>&1; done
+    for u in $(shuf -n $((RANDOM % 3 + 1)) -e omar grace carlos hana); do usermod -aG sudo $u; done
+  expect: "getent group sudo | cut -d: -f4 | tr ',' ' '"
+  answer: set
+  extract: "the list of usernames"
+  hints:
+    - "Group membership lives in /etc/group."
+    - "`getent group sudo` — members are the 4th field."
+    - "getent group sudo"
+  solution: |
+    ```bash
+    getent group sudo           # sudo:x:27:omar,grace
+    ```
+    Note: users whose *primary* group is sudo wouldn't show in field 4. `members sudo` (package `members`) handles both.
+
+- id: d-make-executable
+  skill: permissions
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: "./deploy.sh: Permission denied"
+  message: "./deploy.sh in /opt/darkroom on app01 says permission denied when I run it 🙃 can you make it executable?"
+  setup: |
+    printf '#!/bin/bash\necho deploying\n' > /opt/darkroom/deploy.sh; chmod 644 /opt/darkroom/deploy.sh
+  checks:
+    - ["test -x /opt/darkroom/deploy.sh && /opt/darkroom/deploy.sh | grep -q deploying", "deploy.sh still isn't executable"]
+  solve: "chmod +x /opt/darkroom/deploy.sh"
+  hints:
+    - "The execute bit is missing."
+    - "`chmod +x`"
+    - "sudo chmod +x /opt/darkroom/deploy.sh"
+  solution: |
+    ```bash
+    sudo chmod +x /opt/darkroom/deploy.sh      # same as a+x
+    ```
+    Workaround without the bit: `bash deploy.sh` (the interpreter reads it, no execute needed).

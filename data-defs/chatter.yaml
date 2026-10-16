@@ -175,3 +175,26 @@
 - channel: oncall-alerts
   lines:
     - [diane, "Thanks all for the quick response on last week's incident. Customers noticed the fast fix."]
+
+- channel: platform
+  lines:
+    - [kofi, "wrote up a little cheat sheet for journalctl flags, pinned in the wiki. -u, -f, --since, -p err are 90% of what you need 🙌"]
+
+- channel: platform
+  lines:
+    - [kofi, "friendly reminder: if you're stuck for more than 20 min, ping someone. rubber-ducking is free"]
+    - [marcus, "or read the man page. also free."]
+    - [kofi, "both! both is good 😄"]
+
+- channel: platform
+  lines:
+    - [marcus, "whoever left a 2GB core dump in /tmp on {{HOST}}: I know where you sit"]
+
+- channel: platform
+  lines:
+    - [kofi, "TIL `systemctl list-timers` — systemd timers are a nice cron alternative, logs go straight to the journal"]
+
+- channel: platform
+  lines:
+    - [marcus, "postmortem rule: 'human error' is never a root cause. why was the human able to make that error?"]
+    - [kofi, "+1, blameless but specific"]

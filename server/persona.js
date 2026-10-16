@@ -7,6 +7,7 @@ const CANNED = {
   pass: ['thanks!! 🙏', 'perfect, that did it. thank you', 'confirmed on my side, appreciate it', 'legend, thanks'],
   fail: (r) => [`hmm still not right on my end: ${r}`, `doesn't look fixed yet — ${r}`, `still seeing it: ${r}`],
   nudge: ['any update on this?', 'hey, any luck with this one?', 'bumping this — still an issue'],
+  converse: ["sorry, slammed rn — can I get back to you in a bit?", "in a meeting, will reply after 🙏", "give me 10 min"],
   chat: ["not sure tbh — I only know what I wrote above. can you take a look?", "I don't know more than what I said, sorry 🤷", 'no idea, that\'s why I pinged you 😅'],
 };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
@@ -24,7 +25,7 @@ function systemPrompt({ persona, title, secret }) {
 }
 
 const transcript = (history, persona) =>
-  history.map((m) => `${m.author === 'me' ? 'Colleague' : m.author === persona.id ? persona.name : m.author}: ${m.body}`).join('\n');
+  history.map((m) => `${m.author === 'me' ? 'Colleague' : m.author === persona.id ? persona.name : m.author}: ${m.body}`).join('\n') || '(no messages yet)';
 
 const CLASSIFY_SCHEMA = {
   type: 'object',
@@ -94,5 +95,30 @@ export function createPersonaEngine({ apiKey, model = 'claude-haiku-5-5', client
     }
   }
 
-  return { online, classify, reply };
+  // free-form conversation in a DM or channel (not tied to one ticket thread)
+  async function converse(ctx) {
+    if (!online) return pick(CANNED.converse);
+    const p = ctx.persona;
+    const system = [
+      `You are role-playing ${p.name}, ${p.role} at Darkroom Labs, chatting on the company Slack with a colleague (the user, @dhan),`,
+      'who is the go-to Linux/infra engineer.',
+      `Your personality and writing style: ${p.style}`,
+      `Your technical level is ${p.tech_level}/5 — never use knowledge beyond it.`,
+      `You are talking in ${ctx.place}.`,
+      ctx.knowledge ? `What you know right now (use it naturally, only if relevant):\n${ctx.knowledge}` : '',
+      'Rules: stay in character; write like a real chat message (1-3 short lines, no markdown headers); never reveal hidden',
+      'root causes or exact fix commands for open problems; never mention that this is a training exercise or that you are an AI.',
+    ].filter(Boolean).join('\n');
+    try {
+      return await call({
+        system,
+        messages: [{ role: 'user', content: `Conversation so far:\n${transcript(ctx.history, p)}\n\nReply in character to the colleague's latest message. Output only the chat message text.` }],
+      });
+    } catch (e) {
+      log(`persona converse fallback: ${e.message}`);
+      return pick(CANNED.converse);
+    }
+  }
+
+  return { online, classify, reply, converse };
 }

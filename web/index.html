@@ -83,7 +83,14 @@
             <div><span id="channel-title" class="channel-title"></span> <span id="channel-topic" class="muted"></span></div>
           </div>
           <div id="channel-msgs" class="msgs"></div>
-          <div class="channel-foot muted small">Reply to a request in its thread →</div>
+          <div id="channel-typing" class="typing hidden"></div>
+          <form id="channel-composer" class="composer">
+            <textarea id="channel-text" rows="2"></textarea>
+            <div class="composer-actions">
+              <span class="muted small composer-tip">Ticket replies go in their thread · <code>@name</code> pings someone</span>
+              <button type="submit" class="btn primary small">Send</button>
+            </div>
+          </form>
         </div>
         <div id="thread" class="thread hidden">
           <div class="thread-head">
@@ -121,6 +128,7 @@
       <div class="row">New ticket every
         <input type="number" id="set-min" min="1" max="240" class="num"> –
         <input type="number" id="set-max" min="1" max="240" class="num"> minutes (random)</div>
+      <label class="row"><input type="checkbox" id="set-social"> Social DMs (Sofia from design — friendly, a bit flirty)</label>
       <label class="row"><input type="checkbox" id="set-tailscale"> Allow access over Tailscale (100.64.0.0/10)</label>
       <button type="button" id="set-save" class="btn primary small">Save</button>
       <hr>
@@ -148,6 +156,22 @@
       </div>
     </form>
   </dialog>
+
+  <dialog id="forward" class="modal">
+    <form method="dialog" class="modal-body" id="forward-form">
+      <h2>Forward message</h2>
+      <div id="forward-preview" class="fwd-card"></div>
+      <label class="row">To
+        <select id="forward-to"></select></label>
+      <textarea id="forward-note" rows="2" placeholder="Add a note (optional) — @name pings someone in a channel"></textarea>
+      <div class="row spread">
+        <button value="cancel" class="btn ghost small">Cancel</button>
+        <button id="forward-send" value="send" class="btn primary small">Forward</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="profile" class="profile hidden"></div>
 
   <div id="toast" class="toast hidden"></div>
 

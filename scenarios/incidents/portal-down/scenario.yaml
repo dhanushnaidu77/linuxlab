@@ -20,4 +20,4 @@ hints:
 timeline:  # live mode only
   - { at: 4, persona: priya, channel: platform, text: "is the portal down?? a client just emailed me 😱" }
   - { at: 10, persona: diane, text: "Any update? I need something to tell customers." }
-  - { at: 18, persona: marcus, text: "want a second pair of eyes? I can take app01 if you take web01" }
+  - { at: 18, persona: kofi, text: "want a second pair of eyes? I can watch app01 logs while you look at web01" }

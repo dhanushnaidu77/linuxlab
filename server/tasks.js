@@ -11,6 +11,7 @@ const MAX_NUDGES = 2;
 const MAX_SPAWN_TRIES = 3;
 const DEFAULT_INTERVAL = { min: 5, max: 20 }; // minutes
 const CHAT_KINDS = new Set(['msg']);
+const DM_NUDGE_SHARE = 0.35;
 
 const channelFor = (scn) => (scn.channel === 'dm' ? `dm:${scn.persona}` : scn.channel);
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -42,9 +43,10 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
     return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, P.decay(v.score, v.lastPracticed, now())]));
   }
 
-  function personaCtx(task, scn, message) {
+  function personaCtx(task, scn, message, via = null) {
     const p = defs.personas.get(scn.persona);
-    const history = db.messages({ taskId: task.id }).filter((m) => CHAT_KINDS.has(m.kind) && m.author !== 'system').map((m) => ({ author: m.author, body: m.body }));
+    const source = via ? db.messages({ channel: via, limit: 20 }) : db.messages({ taskId: task.id });
+    const history = source.filter((m) => CHAT_KINDS.has(m.kind) && m.author !== 'system').map((m) => ({ author: m.author, body: m.body }));
     return {
       persona: p, title: render(scn.title, task.vars), secret: render(scn.secret_context, task.vars),
       history, message, answerTask: !!scn.answer, extract: scn.answer?.extract,
@@ -114,22 +116,24 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
     return ok ? result : { pass: false, reason: `the value "${String(extracted).slice(0, 80)}" doesn't match what I'm seeing` };
   }
 
-  async function reply(taskId, text) {
+  // `via`: a DM channel the conversation happens in instead of the ticket thread (results posted there too)
+  async function reply(taskId, text, { via = null } = {}) {
     const task = db.getTask(taskId);
     if (!task || !['open'].includes(task.state)) return { error: 'task is not open' };
     if (busy.has(taskId)) return { error: 'still processing your last message' };
     const scn = scenarios.get(task.scenarioId);
+    const where = via ? { channel: via, taskId: null, meta: { re: taskId } } : { channel: task.channel, taskId };
     busy.add(taskId);
     try {
-      post({ channel: task.channel, taskId, author: 'me', body: text });
+      post({ ...where, author: 'me', body: text });
       db.updateTask(taskId, { lastActivity: now() });
       if (!scn) { post({ channel: task.channel, taskId, author: 'system', body: 'This scenario no longer exists; skipping.' }); db.updateTask(taskId, { state: 'error', closedAt: now() }); taskChanged(taskId); return {}; }
 
-      broadcast({ type: 'typing', taskId, persona: scn.persona });
-      const ctx = personaCtx(task, scn, text);
+      broadcast({ type: 'typing', taskId, channel: where.channel, persona: scn.persona });
+      const ctx = personaCtx(task, scn, text, via);
       const { intent, extracted } = await persona.classify(ctx);
       if (intent !== 'done' && intent !== 'answer') {
-        post({ channel: task.channel, taskId, author: scn.persona, body: await persona.reply(ctx, 'chat') });
+        post({ ...where, author: scn.persona, body: await persona.reply(ctx, 'chat') });
         return { intent };
       }
 
@@ -142,20 +146,20 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
         db.updateTask(taskId, { state: 'open' });
         taskChanged(taskId);
         if (e instanceof LabError) labOffline(e); else log(`check crashed for ${scn.id}: ${e.message}`);
-        post({ channel: task.channel, taskId, author: 'system', body: `⚠️ Couldn't run the verification (${e.message}). Is the lab up? Try again in a moment.` });
+        post({ ...where, author: 'system', body: `⚠️ Couldn't run the verification (${e.message}). Is the lab up? Try again in a moment.` });
         return { intent, error: e.message };
       }
       db.addAttempt(taskId, result.pass, result.reason, now());
-      const fresh = personaCtx(db.getTask(taskId), scn, text);
+      const fresh = personaCtx(db.getTask(taskId), scn, text, via);
       if (!result.pass) {
         db.updateTask(taskId, { state: 'open' });
-        post({ channel: task.channel, taskId, author: scn.persona, body: await persona.reply(fresh, 'fail', { reason: result.reason }) });
+        post({ ...where, author: scn.persona, body: await persona.reply(fresh, 'fail', { reason: result.reason }) });
         taskChanged(taskId);
         return { intent, pass: false };
       }
       const xp = award(db.getTask(taskId), scn);
       db.updateTask(taskId, { xpAwarded: xp });
-      post({ channel: task.channel, taskId, author: scn.persona, body: await persona.reply(fresh, 'pass') });
+      post({ ...where, author: scn.persona, body: await persona.reply(fresh, 'pass') });
       await close(db.getTask(taskId), scn, 'passed');
       return { intent, pass: true, xp };
     } finally {
@@ -229,7 +233,10 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
       if (!scn || task.state !== 'open' || task.nudges >= MAX_NUDGES || busy.has(task.id)) continue;
       if (now() - task.lastActivity < scn.followup_minutes * 60000) continue;
       db.updateTask(task.id, { nudges: task.nudges + 1, lastActivity: now() });
-      post({ channel: task.channel, taskId: task.id, author: scn.persona, body: await persona.reply(personaCtx(task, scn, ''), 'nudge') });
+      const nudge = await persona.reply(personaCtx(task, scn, ''), 'nudge');
+      // like real people, some follow-ups come as a DM instead of in the thread
+      if (rng() < DM_NUDGE_SHARE) post({ channel: `dm:${scn.persona}`, author: scn.persona, body: `re: ${render(scn.title, task.vars)} — ${nudge}`, meta: { re: task.id } });
+      else post({ channel: task.channel, taskId: task.id, author: scn.persona, body: nudge });
     }
     if (nextSpawnAt === null) scheduleNext();
     if (clientCount > 0 && now() >= nextSpawnAt) {
@@ -240,6 +247,9 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
 
   return {
     spawn, reply, hint, skip, tick, summary, cancelOpen,
+    // open tickets filed by a persona, most recently active first
+    openTasksFor: (personaId) => db.openTasks().filter((t) => t.persona === personaId && t.state === 'open').sort((a, b) => b.lastActivity - a.lastActivity),
+    isBusy: (taskId) => busy.has(taskId),
     setClientCount: (n) => { clientCount = n; },
     nextSpawnAt: () => nextSpawnAt,
     rescheduleSpawn: scheduleNext,

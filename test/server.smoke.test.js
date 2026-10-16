@@ -26,7 +26,8 @@ before(async () => {
   let bc = () => {};
   const tm = createTaskManager({ db, defs, scenarios, runner, persona, broadcast: (e) => bc(e), readSolution: () => 'sol' });
   const auth = createAuth({ passwordHash: bcrypt.hashSync('pw', 4), secret: 'x' });
-  const web = createApp({ auth, db, defs, scenarios, tm, persona, lab: { reset: async () => ({ ok: true }), start: async () => ({ ok: true }) } });
+  const conv = { post: async () => ({}), forward: async () => ({}) };
+  const web = createApp({ auth, db, defs, scenarios, tm, conv, persona, lab: { reset: async () => ({ ok: true }), start: async () => ({ ok: true }) } });
   bc = web.broadcast;
   server = http.createServer(web.app);
   server.on('upgrade', web.handleUpgrade);

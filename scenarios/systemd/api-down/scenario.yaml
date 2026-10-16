@@ -18,5 +18,5 @@ hints:
   - "sudo systemctl enable --now darkroom-api"
 timeline:  # live mode only
   - { at: 6, persona: priya, text: "the client team is asking if it's back yet 😬 any news?" }
-  - { at: 12, persona: marcus, text: "need a hand with this one?" }
+  - { at: 12, persona: kofi, text: "need a hand with this one? happy to pair 🙌" }
   - { at: 18, persona: diane, channel: oncall-alerts, text: "Is someone handling the internal API outage? I need an ETA." }

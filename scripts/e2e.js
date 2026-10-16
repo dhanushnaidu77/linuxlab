@@ -69,6 +69,33 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('#thread-msgs .msg').length >= 6, null, { timeout: 60000 });
   await shot(page, '3-replies');
 
+  step('DM a colleague → they reply');
+  await page.click('#dm-list li:has-text("Kofi")');
+  await page.waitForFunction(() => document.querySelector('#channel-title')?.textContent.includes('Kofi'));
+  await page.fill('#channel-text', 'hey, got a minute?');
+  await page.press('#channel-text', 'Enter');
+  await page.waitForFunction(() => [...document.querySelectorAll('#channel-msgs .msg .who')].some((e) => e.textContent.startsWith('Kofi')), null, { timeout: 30000 });
+
+  step('click a person → profile card with title');
+  await page.click('#channel-msgs .msg .who[data-person="kofi"]');
+  await page.waitForSelector('#profile:not(.hidden)');
+  if (!(await page.textContent('#profile')).includes('DevOps Engineer')) throw new Error('profile card missing title');
+  await shot(page, '8-profile');
+  await page.keyboard.press('Escape');
+
+  step('forward the ticket to Kofi');
+  await page.click('#task-list li');
+  await page.waitForSelector('#thread-msgs .msg');
+  await page.hover('#thread-msgs .msg');
+  await page.click('#thread-msgs .msg [data-fwd]');
+  await page.selectOption('#forward-to', 'dm:kofi');
+  await page.fill('#forward-note', 'any idea where to start?');
+  await page.click('#forward-send');
+  await page.click('#dm-list li:has-text("Kofi")');
+  await page.waitForSelector('#channel-msgs .fwd-card', { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelectorAll('#channel-msgs .msg .who').length >= 4, null, { timeout: 30000 });
+  await shot(page, '7-dm-forward');
+
   step('terminal');
   await page.click('.tab[data-tab="term"]');
   await page.waitForSelector('.term-pane .xterm');

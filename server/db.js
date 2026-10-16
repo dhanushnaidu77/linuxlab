@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   xp_awarded INTEGER NOT NULL DEFAULT 0, timeline_done TEXT NOT NULL DEFAULT '[]');
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY, task_id INTEGER, channel TEXT NOT NULL, author TEXT NOT NULL,
-  kind TEXT NOT NULL DEFAULT 'msg', body TEXT NOT NULL, created_at INTEGER NOT NULL);
+  kind TEXT NOT NULL DEFAULT 'msg', body TEXT NOT NULL, created_at INTEGER NOT NULL, meta TEXT);
 CREATE INDEX IF NOT EXISTS messages_channel ON messages(channel, id);
 CREATE TABLE IF NOT EXISTS attempts (task_id INTEGER NOT NULL, pass INTEGER NOT NULL, reason TEXT, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS mastery (skill_id TEXT PRIMARY KEY, score INTEGER NOT NULL, last_practiced INTEGER);
@@ -26,7 +26,7 @@ const rowToTask = (r) => r && ({
   persona: r.persona, createdAt: r.created_at, closedAt: r.closed_at, lastActivity: r.last_activity,
   hintsUsed: r.hints_used, nudges: r.nudges, xpAwarded: r.xp_awarded, timelineDone: JSON.parse(r.timeline_done || '[]'),
 });
-const rowToMsg = (r) => ({ id: r.id, taskId: r.task_id, channel: r.channel, author: r.author, kind: r.kind, body: r.body, at: r.created_at });
+const rowToMsg = (r) => ({ id: r.id, taskId: r.task_id, channel: r.channel, author: r.author, kind: r.kind, body: r.body, at: r.created_at, meta: r.meta ? JSON.parse(r.meta) : null });
 
 const dayBefore = (d) => new Date(Date.parse(d + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
 
@@ -38,6 +38,8 @@ export function openDb(file) {
   // migrations for databases created by older versions
   if (!db.prepare('PRAGMA table_info(tasks)').all().some((c) => c.name === 'timeline_done'))
     db.exec("ALTER TABLE tasks ADD COLUMN timeline_done TEXT NOT NULL DEFAULT '[]'");
+  if (!db.prepare('PRAGMA table_info(messages)').all().some((c) => c.name === 'meta'))
+    db.exec('ALTER TABLE messages ADD COLUMN meta TEXT');
 
   return {
     createTask({ scenarioId, vars, channel, persona, now = Date.now() }) {
@@ -59,9 +61,9 @@ export function openDb(file) {
     recentScenarioIds: (n) => db.prepare('SELECT scenario_id FROM tasks ORDER BY id DESC LIMIT ?').all(n).map((r) => r.scenario_id),
     totalXp: () => db.prepare('SELECT COALESCE(SUM(xp_awarded),0) AS x FROM tasks').get().x,
 
-    addMessage({ channel, taskId = null, author, body, kind = 'msg', now = Date.now() }) {
-      const id = Number(db.prepare('INSERT INTO messages (task_id, channel, author, kind, body, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(taskId, channel, author, kind, body, now).lastInsertRowid);
+    addMessage({ channel, taskId = null, author, body, kind = 'msg', meta = null, now = Date.now() }) {
+      const id = Number(db.prepare('INSERT INTO messages (task_id, channel, author, kind, body, created_at, meta) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(taskId, channel, author, kind, body, now, meta ? JSON.stringify(meta) : null).lastInsertRowid);
       return rowToMsg(db.prepare('SELECT * FROM messages WHERE id = ?').get(id));
     },
     messages({ channel, taskId, limit = 500 }) {
@@ -70,6 +72,7 @@ export function openDb(file) {
         : db.prepare('SELECT * FROM messages WHERE channel = ? ORDER BY id DESC LIMIT ?').all(channel, limit);
       return rows.reverse().map(rowToMsg);
     },
+    getMessage: (id) => { const r = db.prepare('SELECT * FROM messages WHERE id = ?').get(id); return r ? rowToMsg(r) : null; },
     lastMessageIds: () => Object.fromEntries(db.prepare('SELECT channel, MAX(id) AS id FROM messages GROUP BY channel').all().map((r) => [r.channel, r.id])),
 
     addAttempt: (taskId, pass, reason, at = Date.now()) => db.prepare('INSERT INTO attempts VALUES (?, ?, ?, ?)').run(taskId, pass ? 1 : 0, reason, at),

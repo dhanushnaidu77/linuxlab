@@ -96,10 +96,18 @@ function renderSidebar() {
   const chList = $('channel-list');
   chList.innerHTML = '';
   for (const c of s.channels) chList.appendChild(channelItem(c.id, `# ${c.title}`));
-  const dms = Object.keys(s.lastMessageIds).filter((c) => c.startsWith('dm:'));
+  const people = Object.entries(s.personas).filter(([, p]) => !p.bot && (!p.social || s.settings.social));
+  const dms = people.map(([id]) => `dm:${id}`)
+    .sort((a, b) => (s.lastMessageIds[b] || 0) - (s.lastMessageIds[a] || 0) || a.localeCompare(b));
   const dmList = $('dm-list');
-  dmList.innerHTML = dms.length ? '' : '<li class="muted small" style="cursor:default">none yet</li>';
-  for (const c of dms) dmList.appendChild(channelItem(c, `${persona(c.slice(3))?.avatar ?? '@'} ${persona(c.slice(3))?.name ?? c}`));
+  dmList.innerHTML = '';
+  for (const c of dms) {
+    const p = persona(c.slice(3));
+    const li = channelItem(c, `${p.avatar} ${p.name.split(' ')[0]}`);
+    li.insertAdjacentHTML('afterbegin', '<span class="presence"></span>');
+    li.querySelector('span:nth-child(2)').insertAdjacentHTML('afterend', `<span class="dm-role">${esc(p.role)}</span>`);
+    dmList.appendChild(li);
+  }
 
   const tl = $('task-list');
   tl.innerHTML = '';
@@ -137,6 +145,35 @@ function channelItem(id, label) {
   return li;
 }
 
+const fmt = (t) => esc(t ?? '').replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/@(\w+)/g, '<span class="mention">@$1</span>');
+
+// wires hover actions + re: links inside a rendered message container
+function showProfile(id, anchor) {
+  const p = persona(id);
+  if (!p) return;
+  const card = $('profile');
+  const canDm = !p.bot && (!p.social || ui.state.settings.social);
+  card.innerHTML = `<div class="p-avatar">${p.avatar}</div>
+    <div class="p-name">${esc(p.name)}</div>
+    <div class="p-title">${esc(p.role)}</div>
+    <div class="p-team"><span class="presence"></span>${esc(p.team)} · Darkroom Labs</div>
+    ${canDm ? '<button class="btn primary small" id="profile-dm">💬 Message</button>' : ''}`;
+  card.classList.remove('hidden');
+  const r = anchor.getBoundingClientRect();
+  card.style.left = `${Math.max(8, Math.min(r.left, innerWidth - card.offsetWidth - 8))}px`;
+  card.style.top = `${Math.max(8, Math.min(r.bottom + 6, innerHeight - card.offsetHeight - 8))}px`;
+  if (canDm) $('profile-dm').onclick = () => { hideProfile(); openChannel(`dm:${id}`); };
+}
+const hideProfile = () => $('profile').classList.add('hidden');
+document.addEventListener('click', (e) => { if (!e.target.closest('#profile, [data-person]')) hideProfile(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideProfile(); });
+
+function wireMessages(box) {
+  box.querySelectorAll('[data-person]').forEach((el) => (el.onclick = (e) => { e.stopPropagation(); showProfile(el.dataset.person, el); }));
+  box.querySelectorAll('[data-fwd]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openForward(Number(b.dataset.fwd)); }));
+  box.querySelectorAll('[data-re]').forEach((a) => (a.onclick = (e) => { e.stopPropagation(); const t = taskById(Number(a.dataset.re)); if (t) openThread(t.id, t.channel); }));
+}
+
 function msgHtml(m, { root = false, replies = 0, task = null } = {}) {
   if (m.kind === 'solution') {
     return `<details class="solution" ${root ? '' : 'open'}><summary>📘 Solution notes</summary><div class="md">${markdown(m.body)}</div></details>`;
@@ -144,13 +181,18 @@ function msgHtml(m, { root = false, replies = 0, task = null } = {}) {
   const p = persona(m.author);
   const who = m.author === 'me' ? 'You' : m.author === 'system' ? (m.kind === 'hint' ? '💡 Hint' : 'System') : p?.name ?? m.author;
   const avatar = m.author === 'me' ? '🧑‍💻' : m.author === 'system' ? (m.kind === 'hint' ? '💡' : 'ℹ️') : p?.avatar ?? '👤';
-  const body = esc(m.body).replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/@dhan\b/g, '<span class="mention">@dhan</span>');
+  const body = fmt(m.body);
   const cls = ['msg', m.author === 'me' && 'me', m.kind === 'hint' && 'hint', m.author === 'system' && m.kind !== 'hint' && 'system', root && 'root'].filter(Boolean).join(' ');
   const link = root && task ? `<div class="thread-link">🧵 ${replies} ${replies === 1 ? 'reply' : 'replies'} <span class="state ${task.state}">${task.state}</span></div>` : '';
+  const fwd = m.kind === 'forward' && m.meta ? `<div class="fwd-card"><div class="fwd-head">↪ Forwarded from ${esc(persona(m.meta.from)?.name ?? (m.meta.from === 'me' ? 'you' : m.meta.from))} in ${esc(channelLabel(m.meta.channel))}</div><div class="fwd-body">${fmt(m.meta.body)}</div></div>` : '';
+  const reTask = m.meta?.re ?? (m.kind === 'forward' ? m.meta?.taskId : null);
+  const re = reTask && taskById(reTask) ? `<span class="re-link" data-re="${reTask}">🧵 re: ${esc(taskById(reTask).title)}</span>` : '';
+  const actions = m.author !== 'system' ? `<div class="msg-actions"><button data-fwd="${m.id}" title="Forward">↪ Forward</button></div>` : '';
+  const person = p && m.author !== 'me' ? ` data-person="${esc(m.author)}"` : '';
   return `<div class="${cls}" ${root ? `data-task="${m.taskId}"` : ''}>
-    <div class="avatar">${avatar}</div>
-    <div><div><span class="who">${esc(who)}</span>${p && m.author !== 'me' ? `<span class="role">${esc(p.role)}</span>` : ''}<span class="when">${time(m.at)}</span></div>
-    <div class="body">${body}</div>${link}</div></div>`;
+    <div class="avatar"${person}>${avatar}</div>
+    <div><div><span class="who"${person}>${esc(who)}</span>${p && m.author !== 'me' ? `<span class="role">${esc(p.role)}</span>` : ''}<span class="when">${time(m.at)}</span></div>
+    ${m.body ? `<div class="body">${body}</div>` : ''}${fwd}${re}${link}</div>${actions}</div>`;
 }
 
 async function loadChannel(ch) {
@@ -187,7 +229,12 @@ async function renderChannel() {
   const box = $('channel-msgs');
   box.innerHTML = html.join('') || '<div class="empty muted">No messages yet.</div>';
   box.querySelectorAll('.msg.root').forEach((el) => (el.onclick = () => openThread(Number(el.dataset.task), ch)));
+  wireMessages(box);
   box.scrollTop = box.scrollHeight;
+  $('channel-text').placeholder = ch.startsWith('dm:') ? `Message ${persona(ch.slice(3))?.name ?? ''}` : `Message #${ch}`;
+  const typingHere = ui.typing && ui.typing.channel === ch && (ch.startsWith('dm:') || ui.typing.taskId == null);
+  $('channel-typing').classList.toggle('hidden', !typingHere);
+  if (typingHere) $('channel-typing').textContent = `${persona(ui.typing.persona)?.name ?? 'someone'} is typing…`;
   if (msgs.length) { ui.lastSeen[ch] = msgs.at(-1).id; store.set('lastSeen', ui.lastSeen); }
 }
 
@@ -210,14 +257,59 @@ async function renderThread() {
   $('thread-meta').innerHTML = t ? `<span class="state ${t.state}">${t.state}</span> ${'★'.repeat(t.difficulty || 1)} · ${esc(t.skills.join(', '))} · opened ${ago(t.createdAt)} ago${t.hintsUsed ? ` · ${t.hintsUsed} hint${t.hintsUsed > 1 ? 's' : ''}` : ''}` : '';
   const box = $('thread-msgs');
   box.innerHTML = msgs.map((m) => msgHtml(m)).join('');
+  wireMessages(box);
   box.scrollTop = box.scrollHeight;
   const open = t && (t.state === 'open' || t.state === 'checking');
   $('composer').classList.toggle('hidden', !open);
   $('btn-hint').disabled = !open || t.hintsLeft <= 0;
   $('btn-hint').textContent = `💡 Hint${t && open ? ` (${t.hintsLeft} left)` : ''}`;
-  $('typing').classList.toggle('hidden', !(ui.typing && ui.typing.taskId === ui.threadId));
-  if (ui.typing && ui.typing.taskId === ui.threadId) $('typing').textContent = `${persona(ui.typing.persona)?.name ?? 'someone'} is typing…`;
+  const typingInThread = ui.typing && ui.typing.taskId === ui.threadId && !ui.typing.channel?.startsWith('dm:');
+  $('typing').classList.toggle('hidden', !typingInThread);
+  if (typingInThread) $('typing').textContent = `${persona(ui.typing.persona)?.name ?? 'someone'} is typing…`;
 }
+
+$('channel-composer').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('channel-text').value.trim();
+  if (!text) return;
+  $('channel-text').value = '';
+  await guarded(async () => {
+    const r = await api('/api/post', { channel: ui.channel, text });
+    if (r.error) toast(r.error);
+    if (r.pass) toast(`✅ Ticket solved! +${r.xp} XP`);
+  });
+});
+$('channel-text').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('channel-composer').requestSubmit(); }
+});
+
+function findMessage(id) {
+  for (const arr of ui.messages.values()) { const m = arr.find((x) => x.id === id); if (m) return m; }
+  return null;
+}
+function openForward(id) {
+  const m = findMessage(id);
+  if (!m) return;
+  ui.forwarding = id;
+  const who = m.author === 'me' ? 'You' : persona(m.author)?.name ?? m.author;
+  $('forward-preview').innerHTML = `<div class="fwd-head">${esc(who)} in ${esc(channelLabel(m.channel))}</div><div class="fwd-body">${fmt(m.kind === 'forward' ? m.meta?.body : m.body)}</div>`;
+  const s = ui.state;
+  const opts = [...s.channels.map((c) => [c.id, `# ${c.title}`]),
+    ...Object.entries(s.personas).filter(([, p]) => !p.bot && (!p.social || s.settings.social)).map(([id, p]) => [`dm:${id}`, `${p.avatar} ${p.name} — ${p.role}`])];
+  $('forward-to').innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+  $('forward-note').value = '';
+  $('forward').showModal();
+}
+$('forward-send').onclick = (e) => {
+  e.preventDefault();
+  const to = $('forward-to').value;
+  const note = $('forward-note').value;
+  $('forward').close();
+  guarded(async () => {
+    await api('/api/forward', { messageId: ui.forwarding, to, note });
+    toast(`↪ Forwarded to ${channelLabel(to)}`);
+  });
+};
 
 $('thread-close').onclick = () => { ui.threadId = null; $('thread').classList.add('hidden'); $('chat-view').classList.remove('has-thread'); renderSidebar(); };
 
@@ -325,11 +417,12 @@ $('btn-settings').onclick = () => {
   $('set-max').value = s.interval.max;
   $('set-tailscale').checked = s.tailscale;
   $('set-live').checked = s.live;
+  $('set-social').checked = s.social;
   $('lab-msg').textContent = '';
   $('settings').showModal();
 };
 $('set-save').onclick = () => guarded(async () => {
-  await api('/api/settings', { paused: $('set-paused').checked, live: $('set-live').checked, tailscale: $('set-tailscale').checked, interval: { min: Number($('set-min').value), max: Number($('set-max').value) } });
+  await api('/api/settings', { paused: $('set-paused').checked, live: $('set-live').checked, social: $('set-social').checked, tailscale: $('set-tailscale').checked, interval: { min: Number($('set-min').value), max: Number($('set-max').value) } });
   await refreshState();
   toast('Settings saved');
 });
@@ -368,7 +461,11 @@ function onEvent(e) {
     const arr = ui.messages.get(m.channel);
     if (arr && !arr.some((x) => x.id === m.id)) arr.push(m);
     if (ui.state) ui.state.lastMessageIds[m.channel] = m.id;
-    if (ui.typing?.taskId === m.taskId && m.author !== 'me') ui.typing = null;
+    if (ui.typing && m.author !== 'me' && (ui.typing.taskId === m.taskId || ui.typing.channel === m.channel)) ui.typing = null;
+    if (m.channel === ui.channel && ui.view !== 'term') {
+      // the open channel counts as read immediately (before the async re-render)
+      ui.lastSeen[m.channel] = m.id; store.set('lastSeen', ui.lastSeen);
+    }
     if (m.channel === ui.channel) renderChannel();
     if (m.taskId === ui.threadId) renderThread();
     renderSidebar();
@@ -384,7 +481,8 @@ function onEvent(e) {
     if (ui.channel === t.channel) renderChannel();
   } else if (e.type === 'typing') {
     ui.typing = e;
-    if (e.taskId === ui.threadId) renderThread();
+    if (e.taskId != null && e.taskId === ui.threadId) renderThread();
+    if (e.channel === ui.channel) renderChannel();
     setTimeout(() => { if (ui.typing === e) { ui.typing = null; renderThread(); } }, 20000);
   } else if (e.type === 'reset') {
     location.reload();

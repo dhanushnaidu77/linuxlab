@@ -141,7 +141,10 @@ test('tick nudges after followup minutes, at most twice', async () => {
   clock.t += 2 * MIN; await tm.tick();
   clock.t += 21 * MIN; await tm.tick();
   clock.t += 21 * MIN; await tm.tick();
-  assert.deepEqual(db.messages({ taskId: task.id }).map((m) => m.body), ['please fix x', 'NUDGE', 'NUDGE']);
+  // nudges land in the thread or (sometimes) as a DM from the requester — two in total either way
+  const inThread = db.messages({ taskId: task.id }).filter((m) => m.body === 'NUDGE').length;
+  const inDm = db.messages({ channel: 'dm:marcus' }).filter((m) => m.body === 're: Fix it — NUDGE' && m.meta.re === task.id).length;
+  assert.equal(inThread + inDm, 2);
 });
 
 test('auto-spawn respects pause, clients, interval and open-task cap', async () => {

@@ -19,4 +19,4 @@ hints:
   - "sudo lsof +L1 /srv/logs   → note PID/FD → sudo kill <PID>   (or: sudo truncate -s0 /proc/<PID>/fd/<FD>)"
 timeline:  # live mode only
   - { at: 8, persona: marcus, text: "df on /srv/logs just ticked up again. it's still growing" }
-  - { at: 16, persona: marcus, text: "hint from the peanut gallery: ask the kernel what's still holding files open 😉" }
+  - { at: 16, persona: kofi, text: "hint from the peanut gallery: ask the kernel what's still holding files open 😉" }

@@ -71,3 +71,16 @@ test('multi-line conversations are spaced out and templated', async () => {
   assert.ok(p[first + 1].at - p[first].at >= MIN, 'replies are not instant');
   assert.ok(p.every((m) => m.taskId === null));
 });
+
+test('social openers: only with live + social on, rare, DM only', async () => {
+  const db = openDb(':memory:');
+  const clock = { t: 0 };
+  const ch = createChatter({ db, convos: [], social: { sofia: ['hey 😊'] }, broadcast: () => {}, rng: seededRng(5), now: () => clock.t, clientCount: () => 1 });
+  db.setSetting('live', true); db.setSetting('social', false);
+  for (let i = 0; i < 4 * 60 * 4; i++) { clock.t += 15000; await ch.tick(); }
+  assert.equal(db.messages({ channel: 'dm:sofia' }).length, 0);
+  db.setSetting('social', true);
+  for (let i = 0; i < 6 * 60 * 4; i++) { clock.t += 15000; await ch.tick(); }
+  const n = db.messages({ channel: 'dm:sofia' }).length;
+  assert.ok(n >= 2 && n <= 6, `${n} openers in 6h`);
+});

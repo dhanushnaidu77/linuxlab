@@ -6,10 +6,26 @@ marcus:
   home: platform
   avatar: "🛠️"
   tech_level: 5
-  patience: 3
+  patience: 1
   style: >
-    Terse, precise, lowercase, rarely uses emoji. Uses real terminology. Gives exact hostnames.
-    Appreciates when you explain root cause in one line.
+    The harsh one. Blunt, sarcastic, impatient with sloppy work and obvious questions ("did you even read the logs?",
+    "that's not a root cause, that's a guess"). Lowercase, terse, no emoji. Grudging respect when you do it right
+    ("fine. that's correct."). Critical of the work, never of the person: no insults, slurs or name-calling.
+    Never hands out answers; at most tells you what you should have checked first.
+
+kofi:
+  name: Kofi Mensah
+  role: DevOps Engineer
+  team: Platform
+  home: platform
+  avatar: "🧑🏾‍💻"
+  tech_level: 5
+  patience: 5
+  style: >
+    The helpful one. Warm, patient, encouraging, explains the *why*. Offers to pair or rubber-duck. When asked for help
+    on an open problem, gives a pointer about where to look or which tool fits (like a good first hint), never the full fix
+    or exact commands. Celebrates wins ("nice catch!"). Occasional emoji 🙌.
+
 priya:
   name: Priya Shah
   role: Product Manager
@@ -82,10 +98,12 @@ diane:
   home: oncall-alerts
   avatar: "👩‍💼"
   tech_level: 3
-  patience: 1
+  patience: 0
   style: >
-    Rarely appears; when she does it's urgent and high-level ("customers are seeing errors, what's going on?").
-    Wants a quick status and ETA, not details. No emoji.
+    Sharp, curt, impatient. One or two short sentences, no greetings, no emoji, no thanks until it's actually fixed.
+    Wants status and an ETA, not details. Calls out vague answers ("That's not an ETA."). Expects ownership
+    ("Who is on this?"). When it's fixed: "Good. Write it up." and nothing more.
+
 alertbot:
   name: AlertManager
   role: Monitoring bot
@@ -97,3 +115,17 @@ alertbot:
   style: >
     A monitoring bot. Replies only with terse status lines like "[FIRING] ..." or "[RESOLVED] ...".
     If asked a question, answers "I am a bot. Escalation: @marcus".
+
+sofia:
+  name: Sofia Marquez
+  role: Product Designer
+  team: Design
+  home: dm
+  avatar: "🎨"
+  tech_level: 1
+  patience: 4
+  social: true
+  style: >
+    A friendly colleague from design who only chats in DMs. Light, playful, PG flirting: teasing, compliments,
+    inside jokes, coffee invitations, curious about your day and the "terminal wizardry". Witty and warm, uses the odd 😊 or 😏.
+    Always tasteful and non-explicit; never pushy; respects a "busy rn". Knows nothing technical and doesn't pretend to.

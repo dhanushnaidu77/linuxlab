@@ -8,7 +8,7 @@ import { ROOT } from './config.js';
 
 const clientIp = (req) => req.socket.remoteAddress;
 
-export function createApp({ auth, db, defs, scenarios, tm, persona, lab, log = () => {} }) {
+export function createApp({ auth, db, defs, scenarios, tm, conv, persona, lab, log = () => {} }) {
   const tailscale = () => db.getSetting('tailscale', false);
   const app = express();
   app.disable('x-powered-by');
@@ -44,13 +44,13 @@ export function createApp({ auth, db, defs, scenarios, tm, persona, lab, log = (
     const xp = db.totalXp();
     return {
       channels: [...defs.channels.values()],
-      personas: Object.fromEntries([...defs.personas.values()].map((p) => [p.id, { name: p.name, role: p.role, avatar: p.avatar, team: p.team }])),
+      personas: Object.fromEntries([...defs.personas.values()].map((p) => [p.id, { name: p.name, role: p.role, avatar: p.avatar, team: p.team, social: !!p.social, bot: p.id === 'alertbot' }])),
       skills: [...defs.skills.values()].map((s) => ({ ...s, mastery: mastery[s.id], unlocked: P.unlocked(defs.skills, mastery).has(s.id), scenarios: [...scenarios.values()].filter((x) => x.skills[0] === s.id).length })),
       xp, level: P.level(xp), nextLevelXp: 100 * P.level(xp) ** 2, streak: db.streak(new Date().toISOString().slice(0, 10)),
       openTasks: db.openTasks().map(tm.summary),
       recentTasks: db.recentTasks(15).filter((t) => !['open', 'checking', 'pending_setup'].includes(t.state)).map(tm.summary),
       lastMessageIds: db.lastMessageIds(),
-      settings: { paused: db.getSetting('paused', false), interval: db.getSetting('interval', { min: 5, max: 20 }), tailscale: tailscale(), live: db.getSetting('live', false) },
+      settings: { paused: db.getSetting('paused', false), interval: db.getSetting('interval', { min: 5, max: 20 }), tailscale: tailscale(), live: db.getSetting('live', false), social: db.getSetting('social', true) },
       nextSpawnAt: tm.nextSpawnAt(),
       lab: labState,
       personaOnline: persona.online,
@@ -58,7 +58,10 @@ export function createApp({ auth, db, defs, scenarios, tm, persona, lab, log = (
     };
   }
 
-  const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => { log(`api error ${req.url}: ${e.stack}`); res.status(500).json({ error: e.message }); });
+  const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
+    if (!e.status) log(`api error ${req.url}: ${e.stack}`);
+    res.status(e.status || 500).json({ error: e.message });
+  });
   const taskId = (req) => Number(req.params.id);
 
   app.get('/api/state', (req, res) => res.json(state()));
@@ -74,6 +77,8 @@ export function createApp({ auth, db, defs, scenarios, tm, persona, lab, log = (
     if (!text) return res.status(400).json({ error: 'empty message' });
     res.json(await tm.reply(taskId(req), text));
   }));
+  app.post('/api/post', wrap(async (req, res) => res.json(await conv.post({ channel: String(req.body?.channel || ''), text: req.body?.text }))));
+  app.post('/api/forward', wrap(async (req, res) => res.json(await conv.forward({ messageId: req.body?.messageId, to: String(req.body?.to || ''), note: req.body?.note || '' }))));
   app.post('/api/tasks/:id/hint', wrap(async (req, res) => res.json({ hint: await tm.hint(taskId(req)) })));
   app.post('/api/tasks/:id/skip', wrap(async (req, res) => res.json({ ok: await tm.skip(taskId(req)) })));
 
@@ -81,6 +86,7 @@ export function createApp({ auth, db, defs, scenarios, tm, persona, lab, log = (
     const b = req.body || {};
     if (typeof b.paused === 'boolean') db.setSetting('paused', b.paused);
     if (typeof b.tailscale === 'boolean') db.setSetting('tailscale', b.tailscale);
+    if (typeof b.social === 'boolean') db.setSetting('social', b.social);
     if (typeof b.live === 'boolean' && b.live !== db.getSetting('live', false)) {
       db.setSetting('live', b.live);
       if (b.live) db.setSetting('liveSince', Date.now());

@@ -19,5 +19,5 @@ hints:
   - "Edit /etc/darkroom/api.conf: in the [server] section set `port = 8080` (leave the [database] port alone!), then: sudo systemctl restart darkroom-api"
 timeline:  # live mode only
   - { at: 5, persona: alertbot, text: "[FIRING] DarkroomApiDown — still firing, restart count now 40+" }
-  - { at: 10, persona: marcus, text: "you on this? the journal usually says exactly why it dies" }
+  - { at: 10, persona: marcus, text: "you on this? it is a crash loop. the journal tells you exactly why. read it." }
   - { at: 15, persona: diane, channel: oncall-alerts, text: "What's the status on the API alert?" }

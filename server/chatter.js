@@ -24,20 +24,23 @@ export function loadChatter(dir, defs) {
   return { convos, warnings };
 }
 
-const SOCIAL_FIRST = [10, 25];
-const SOCIAL_GAP = [60, 120];
+const OPENER_FIRST = [8, 20]; // minutes after live mode starts
+const OPENER_GAP = [45, 90]; // per person
 
-export function loadSocial(dir, defs) {
-  const file = path.join(dir, 'social.yaml');
+// openers: { personaId: [ "text" | { q, a } ] }
+export function loadDmOpeners(dir, defs) {
+  const file = path.join(dir, 'dm-openers.yaml');
   if (!fs.existsSync(file)) return {};
   const raw = YAML.parse(fs.readFileSync(file, 'utf8')) || {};
-  return Object.fromEntries(Object.entries(raw).filter(([id, lines]) => defs.personas.get(id)?.social && Array.isArray(lines) && lines.length));
+  return Object.fromEntries(Object.entries(raw)
+    .filter(([id, items]) => defs.personas.has(id) && Array.isArray(items) && items.length)
+    .map(([id, items]) => [id, items.map((it) => (typeof it === 'string' ? { q: it } : it)).filter((it) => it?.q)]));
 }
 
-export function createChatter({ db, convos, social = {}, broadcast, rng = Math.random, now = Date.now, clientCount = () => 1 }) {
+export function createChatter({ db, convos, openers = {}, broadcast, rng = Math.random, now = Date.now, clientCount = () => 1 }) {
   let nextAt = null;
-  let socialAt = null;
-  const socialRecent = [];
+  const openerAt = {}; // personaId -> next opener time
+  const openerRecent = {}; // personaId -> recently used indexes
   let queue = []; // { at, channel, author, body }
   const recent = [];
   const between = ([a, b]) => (a + rng() * (b - a)) * 60000;
@@ -57,24 +60,35 @@ export function createChatter({ db, convos, social = {}, broadcast, rng = Math.r
     queue = c.lines.map(([author, text], i) => ({ at: (at += i ? between(REPLY_GAP) : 0), channel: c.channel, author, body: fill(text) }));
   }
 
-  function socialTick() {
-    const people = Object.keys(social);
-    if (!db.getSetting('social', true) || !people.length) { socialAt = null; return; }
-    if (socialAt === null) socialAt = now() + between(SOCIAL_FIRST);
-    if (now() < socialAt) return;
-    socialAt = now() + between(SOCIAL_GAP);
-    const who = people[Math.floor(rng() * people.length)];
-    const lines = social[who].filter((l) => !socialRecent.includes(l));
-    const body = (lines.length ? lines : social[who])[Math.floor(rng() * (lines.length || social[who].length))];
-    socialRecent.push(body);
-    if (socialRecent.length > Math.max(0, social[who].length - 2)) socialRecent.shift();
-    broadcast({ type: 'message', message: db.addMessage({ channel: `dm:${who}`, author: who, body, now: now() }) });
+  function openersTick() {
+    for (const who of Object.keys(openers)) {
+      if (openerAt[who] == null) { openerAt[who] = now() + between(OPENER_FIRST); continue; }
+      if (now() < openerAt[who]) continue;
+      openerAt[who] = now() + between(OPENER_GAP);
+      askNow(who);
+    }
+  }
+
+  // post one opener right now (used outside live mode, in place of a ticket); returns the message or null
+  function askNow(who = null) {
+    const people = Object.keys(openers);
+    if (!people.length) return null;
+    who ??= people[Math.floor(rng() * people.length)];
+    const items = openers[who];
+    const recent = (openerRecent[who] ||= []);
+    const pool = items.map((_, i) => i).filter((i) => !recent.includes(i));
+    const idx = pool[Math.floor(rng() * pool.length)];
+    recent.push(idx);
+    if (recent.length > Math.max(0, items.length - 2)) recent.shift();
+    const m = db.addMessage({ channel: `dm:${who}`, author: who, body: items[idx].q, meta: { opener: idx }, now: now() });
+    broadcast({ type: 'message', message: m });
+    return m;
   }
 
   async function tick() {
     const live = db.getSetting('live', false) && !db.getSetting('paused', false) && clientCount() > 0;
-    if (!live) { nextAt = null; socialAt = null; queue = []; return; }
-    socialTick();
+    if (!live) { nextAt = null; for (const k of Object.keys(openerAt)) delete openerAt[k]; queue = []; return; }
+    openersTick();
     if (nextAt === null) nextAt = now() + between(FIRST_DELAY);
     while (queue.length && queue[0].at <= now()) {
       const m = queue.shift();
@@ -87,5 +101,5 @@ export function createChatter({ db, convos, social = {}, broadcast, rng = Math.r
     }
   }
 
-  return { tick };
+  return { tick, askNow };
 }

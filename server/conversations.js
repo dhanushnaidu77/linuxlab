@@ -13,23 +13,26 @@ export function mentionedPersona(text, defs) {
   return null;
 }
 
-export function createConversations({ db, defs, scenarios, tm, persona, broadcast, now = Date.now, log = () => {} }) {
+export function createConversations({ db, defs, scenarios, tm, persona, broadcast, openers = {}, now = Date.now, log = () => {} }) {
   const post = (fields) => {
     const m = db.addMessage({ ...fields, now: now() });
     broadcast({ type: 'message', message: m });
     return m;
   };
-  const socialOn = () => db.getSetting('social', true);
 
   function validTarget(channel) {
     if (defs.channels.has(channel)) return true;
     const p = channel.startsWith('dm:') && defs.personas.get(channel.slice(3));
-    return !!p && !isBot(p) && (!p.social || socialOn());
+    return !!p && !isBot(p);
   }
 
   // what a persona plausibly knows: their own open tickets fully, other tickets only as a hunch (first hint)
   function knowledgeFor(p, extraTaskIds = []) {
     const lines = [];
+    // a question this persona asked you in DMs: what a good answer covers, so they can react to yours
+    const lastQ = db.messages({ channel: `dm:${p.id}`, limit: 30 }).filter((m) => m.author === p.id && m.meta?.opener != null).at(-1);
+    const item = lastQ && openers[p.id]?.[lastQ.meta.opener];
+    if (item?.a) lines.push(`- You asked the colleague: "${item.q}". What a correct answer covers (you do NOT know this yourself; use it only to judge whether their explanation makes sense): ${item.a}`);
     for (const t of tm.openTasksFor(p.id)) {
       const scn = scenarios.get(t.scenarioId);
       if (scn) lines.push(`- Your open request "${render(scn.title, t.vars)}" (posted in ${t.channel}). Background: ${render(scn.secret_context, t.vars).trim()}`);

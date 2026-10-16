@@ -28,7 +28,7 @@ function harness({ checks = [] } = {}) {
   const events = [];
   const broadcast = (e) => events.push(e);
   const tm = createTaskManager({ db, defs, scenarios: new Map([[scn.id, scn]]), runner, persona, broadcast, rng: seededRng(1), now: () => clock.t, readSolution: () => 'SOL' });
-  const conv = createConversations({ db, defs, scenarios: new Map([[scn.id, scn]]), tm, persona, broadcast, now: () => clock.t });
+  const conv = createConversations({ db, defs, scenarios: new Map([[scn.id, scn]]), tm, persona, broadcast, openers: { leo: [{ q: 'what is 2>&1?', a: 'NOTES: fd 2 to fd 1' }] }, now: () => clock.t });
   return { db, tm, conv, clock, seen, events };
 }
 
@@ -99,4 +99,13 @@ test('forward rejects unknown targets and messages', async () => {
   const { conv } = harness();
   await assert.rejects(conv.forward({ messageId: 999, to: 'platform' }));
   await assert.rejects(conv.forward({ messageId: 1, to: 'dm:nobody' }));
+});
+
+test('answering Leo\'s DM question: he gets the answer notes to judge your reply', async () => {
+  const { db, conv, seen } = harness();
+  db.addMessage({ channel: 'dm:leo', author: 'leo', body: 'what is 2>&1?', meta: { opener: 0 } });
+  await conv.post({ channel: 'dm:leo', text: 'it sends errors to the same place as normal output' });
+  const ctx = seen.find((s) => s.kind === 'converse').ctx;
+  assert.match(ctx.knowledge, /NOTES: fd 2 to fd 1/);
+  assert.equal(db.messages({ channel: 'dm:leo' }).at(-1).author, 'leo');
 });

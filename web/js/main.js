@@ -96,7 +96,7 @@ function renderSidebar() {
   const chList = $('channel-list');
   chList.innerHTML = '';
   for (const c of s.channels) chList.appendChild(channelItem(c.id, `# ${c.title}`));
-  const people = Object.entries(s.personas).filter(([, p]) => !p.bot && (!p.social || s.settings.social));
+  const people = Object.entries(s.personas).filter(([, p]) => !p.bot);
   const dms = people.map(([id]) => `dm:${id}`)
     .sort((a, b) => (s.lastMessageIds[b] || 0) - (s.lastMessageIds[a] || 0) || a.localeCompare(b));
   const dmList = $('dm-list');
@@ -152,7 +152,7 @@ function showProfile(id, anchor) {
   const p = persona(id);
   if (!p) return;
   const card = $('profile');
-  const canDm = !p.bot && (!p.social || ui.state.settings.social);
+  const canDm = !p.bot;
   card.innerHTML = `<div class="p-avatar">${p.avatar}</div>
     <div class="p-name">${esc(p.name)}</div>
     <div class="p-title">${esc(p.role)}</div>
@@ -295,7 +295,7 @@ function openForward(id) {
   $('forward-preview').innerHTML = `<div class="fwd-head">${esc(who)} in ${esc(channelLabel(m.channel))}</div><div class="fwd-body">${fmt(m.kind === 'forward' ? m.meta?.body : m.body)}</div>`;
   const s = ui.state;
   const opts = [...s.channels.map((c) => [c.id, `# ${c.title}`]),
-    ...Object.entries(s.personas).filter(([, p]) => !p.bot && (!p.social || s.settings.social)).map(([id, p]) => [`dm:${id}`, `${p.avatar} ${p.name} — ${p.role}`])];
+    ...Object.entries(s.personas).filter(([, p]) => !p.bot).map(([id, p]) => [`dm:${id}`, `${p.avatar} ${p.name} — ${p.role}`])];
   $('forward-to').innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
   $('forward-note').value = '';
   $('forward').showModal();
@@ -399,7 +399,9 @@ $('btn-new').onclick = () => guarded(async () => {
   $('btn-new').disabled = true;
   try {
     const r = await api('/api/tasks/spawn', {});
-    if (r.error) toast(r.error); else toast(`📨 New ticket in ${channelLabel(r.task.channel)}`);
+    if (r.error) toast(r.error);
+    else if (r.question) toast(`💬 ${persona(r.question.slice(3))?.name ?? 'Someone'} sent you a question`);
+    else toast(`📨 New ticket in ${channelLabel(r.task.channel)}`);
   } finally { $('btn-new').disabled = false; }
 });
 $('live-status').onclick = () => guarded(async () => {
@@ -417,12 +419,11 @@ $('btn-settings').onclick = () => {
   $('set-max').value = s.interval.max;
   $('set-tailscale').checked = s.tailscale;
   $('set-live').checked = s.live;
-  $('set-social').checked = s.social;
   $('lab-msg').textContent = '';
   $('settings').showModal();
 };
 $('set-save').onclick = () => guarded(async () => {
-  await api('/api/settings', { paused: $('set-paused').checked, live: $('set-live').checked, social: $('set-social').checked, tailscale: $('set-tailscale').checked, interval: { min: Number($('set-min').value), max: Number($('set-max').value) } });
+  await api('/api/settings', { paused: $('set-paused').checked, live: $('set-live').checked, tailscale: $('set-tailscale').checked, interval: { min: Number($('set-min').value), max: Number($('set-max').value) } });
   await refreshState();
   toast('Settings saved');
 });

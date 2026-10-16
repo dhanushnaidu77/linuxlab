@@ -226,3 +226,17 @@ test('turning live mode on mid-ticket skips entries that were already due (no bu
   assert.equal(db.messages({ taskId: task.id }).at(-1).body, 'worse now');
   assert.deepEqual(calls.ran, ['escalate.sh']);
 });
+
+test('outside live mode, some spawns become a DM question instead of a ticket', async () => {
+  let asked = 0;
+  const db = openDb(':memory:');
+  const tm = createTaskManager({ db, defs, scenarios: new Map([[fix.id, fix]]), runner: { setup: async (s, v) => v, check: async () => ({ pass: true }), optional: async () => null },
+    persona: { online: false, classify: async () => ({}), reply: async () => '' }, broadcast: () => {}, rng: seededRng(9),
+    askQuestion: () => { asked++; return { channel: 'dm:leo' }; } });
+  let questions = 0;
+  for (let i = 0; i < 200; i++) { const r = await tm.spawn({ force: true }); if (r?.question) questions++; else if (r) tm.cancelOpen('x'); }
+  assert.ok(questions >= 15 && questions <= 50, `${questions}/200 were questions`);
+  assert.equal(asked, questions);
+  db.setSetting('live', true);
+  for (let i = 0; i < 50; i++) { const r = await tm.spawn({ force: true }); assert.ok(!r?.question, 'live mode uses its own schedule'); if (r) tm.cancelOpen('x'); }
+});

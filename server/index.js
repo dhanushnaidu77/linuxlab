@@ -8,7 +8,7 @@ import { createRunner } from './runner.js';
 import { createPersonaEngine } from './persona.js';
 import { createTaskManager } from './tasks.js';
 import { createApp } from './http.js';
-import { loadChatter, loadSocial, createChatter } from './chatter.js';
+import { loadChatter, loadDmOpeners, createChatter } from './chatter.js';
 import { createConversations } from './conversations.js';
 import * as lab from './lab.js';
 
@@ -34,11 +34,13 @@ const persona = createPersonaEngine({ apiKey: cfg.anthropicKey, model: cfg.model
 log(persona.online ? `persona engine: ${cfg.model}` : 'persona engine: offline (no ANTHROPIC_API_KEY) — canned replies');
 
 let broadcast = () => {};
-const tm = createTaskManager({ db, defs, scenarios, runner: createRunner({ log }), persona, broadcast: (e) => broadcast(e), log });
-const conv = createConversations({ db, defs, scenarios, tm, persona, broadcast: (e) => broadcast(e), log });
+let chatter;
+const tm = createTaskManager({ db, defs, scenarios, runner: createRunner({ log }), persona, broadcast: (e) => broadcast(e), log, askQuestion: () => chatter?.askNow() });
+const openers = loadDmOpeners(cfg.defsDir, defs);
+const conv = createConversations({ db, defs, scenarios, tm, persona, openers, broadcast: (e) => broadcast(e), log });
 const web = createApp({ auth, db, defs, scenarios, tm, conv, persona, lab: { reset: lab.labReset, start: lab.labStart }, log });
 broadcast = web.broadcast;
-const chatter = createChatter({ db, convos, social: loadSocial(cfg.defsDir, defs), broadcast: (e) => broadcast(e), clientCount: () => web.clientCount() });
+chatter = createChatter({ db, convos, openers, broadcast: (e) => broadcast(e), clientCount: () => web.clientCount() });
 
 // tasks left mid-check by a previous crash go back to open
 for (const t of db.openTasks()) if (t.state !== 'open') db.updateTask(t.id, { state: 'open' });

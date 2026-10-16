@@ -12,6 +12,7 @@ const MAX_SPAWN_TRIES = 3;
 const DEFAULT_INTERVAL = { min: 5, max: 20 }; // minutes
 const CHAT_KINDS = new Set(['msg']);
 const DM_NUDGE_SHARE = 0.35;
+const QUESTION_SHARE = 0.15;
 
 const channelFor = (scn) => (scn.channel === 'dm' ? `dm:${scn.persona}` : scn.channel);
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -20,7 +21,7 @@ const defaultReadSolution = (scn) => {
   return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '_No solution notes for this scenario._';
 };
 
-export function createTaskManager({ db, defs, scenarios, runner, persona, broadcast, rng = Math.random, now = Date.now, log = () => {}, readSolution = defaultReadSolution }) {
+export function createTaskManager({ db, defs, scenarios, runner, persona, broadcast, rng = Math.random, now = Date.now, log = () => {}, readSolution = defaultReadSolution, askQuestion = null }) {
   let clientCount = 0;
   let nextSpawnAt = null;
   const busy = new Set();
@@ -60,6 +61,11 @@ export function createTaskManager({ db, defs, scenarios, runner, persona, broadc
 
   async function spawn({ force = false, scenarioId = null } = {}) {
     if (!force && (db.getSetting('paused', false) || db.openTasks().length >= MAX_OPEN)) return null;
+    // outside live mode, some "new ticket" slots are a junior's DM question instead
+    if (!scenarioId && askQuestion && !db.getSetting('live', false) && rng() < QUESTION_SHARE) {
+      const m = askQuestion();
+      if (m) return { question: true, channel: m.channel };
+    }
     const tried = new Set();
     for (let attempt = 0; attempt < MAX_SPAWN_TRIES; attempt++) {
       const mastery = effectiveMastery();

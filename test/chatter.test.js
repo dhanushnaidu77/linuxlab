@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { openDb } from '../server/db.js';
 import { loadDefs } from '../server/defs.js';
-import { loadChatter, createChatter } from '../server/chatter.js';
+import { loadChatter, loadDmOpeners, createChatter } from '../server/chatter.js';
 import { seededRng } from '../server/scenarios.js';
 import { ROOT } from '../server/config.js';
 
@@ -72,15 +72,21 @@ test('multi-line conversations are spaced out and templated', async () => {
   assert.ok(p.every((m) => m.taskId === null));
 });
 
-test('social openers: only with live + social on, rare, DM only', async () => {
+test('DM openers: only in live mode, roughly every 45-90 min per person, with opener index in meta', async () => {
   const db = openDb(':memory:');
   const clock = { t: 0 };
-  const ch = createChatter({ db, convos: [], social: { sofia: ['hey 😊'] }, broadcast: () => {}, rng: seededRng(5), now: () => clock.t, clientCount: () => 1 });
-  db.setSetting('live', true); db.setSetting('social', false);
-  for (let i = 0; i < 4 * 60 * 4; i++) { clock.t += 15000; await ch.tick(); }
-  assert.equal(db.messages({ channel: 'dm:sofia' }).length, 0);
-  db.setSetting('social', true);
+  const ch = createChatter({ db, convos: [], openers: { leo: [{ q: 'what is 2>&1?', a: 'stderr to stdout' }, { q: 'kill vs kill -9?', a: 'TERM vs KILL' }] }, broadcast: () => {}, rng: seededRng(5), now: () => clock.t, clientCount: () => 1 });
+  for (let i = 0; i < 2 * 60 * 4; i++) { clock.t += 15000; await ch.tick(); }
+  assert.equal(db.messages({ channel: 'dm:leo' }).length, 0);
+  db.setSetting('live', true);
   for (let i = 0; i < 6 * 60 * 4; i++) { clock.t += 15000; await ch.tick(); }
-  const n = db.messages({ channel: 'dm:sofia' }).length;
-  assert.ok(n >= 2 && n <= 6, `${n} openers in 6h`);
+  const msgs = db.messages({ channel: 'dm:leo' });
+  assert.ok(msgs.length >= 4 && msgs.length <= 8, `${msgs.length} openers in 6h`);
+  assert.ok(msgs.every((m) => m.author === 'leo' && Number.isInteger(m.meta.opener)));
+});
+
+test('real DM openers file loads', () => {
+  const o = loadDmOpeners(path.join(ROOT, 'data-defs'), defs);
+  assert.deepEqual(Object.keys(o), ['leo']);
+  assert.ok(o.leo.length >= 20 && o.leo.every((it) => it.q && it.a));
 });

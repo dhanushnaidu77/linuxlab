@@ -44,13 +44,13 @@ export function createApp({ auth, db, defs, scenarios, tm, conv, persona, lab, l
     const xp = db.totalXp();
     return {
       channels: [...defs.channels.values()],
-      personas: Object.fromEntries([...defs.personas.values()].map((p) => [p.id, { name: p.name, role: p.role, avatar: p.avatar, team: p.team, social: !!p.social, bot: p.id === 'alertbot' }])),
+      personas: Object.fromEntries([...defs.personas.values()].map((p) => [p.id, { name: p.name, role: p.role, avatar: p.avatar, team: p.team, bot: p.id === 'alertbot' }])),
       skills: [...defs.skills.values()].map((s) => ({ ...s, mastery: mastery[s.id], unlocked: P.unlocked(defs.skills, mastery).has(s.id), scenarios: [...scenarios.values()].filter((x) => x.skills[0] === s.id).length })),
       xp, level: P.level(xp), nextLevelXp: 100 * P.level(xp) ** 2, streak: db.streak(new Date().toISOString().slice(0, 10)),
       openTasks: db.openTasks().map(tm.summary),
       recentTasks: db.recentTasks(15).filter((t) => !['open', 'checking', 'pending_setup'].includes(t.state)).map(tm.summary),
       lastMessageIds: db.lastMessageIds(),
-      settings: { paused: db.getSetting('paused', false), interval: db.getSetting('interval', { min: 5, max: 20 }), tailscale: tailscale(), live: db.getSetting('live', false), social: db.getSetting('social', true) },
+      settings: { paused: db.getSetting('paused', false), interval: db.getSetting('interval', { min: 5, max: 20 }), tailscale: tailscale(), live: db.getSetting('live', false) },
       nextSpawnAt: tm.nextSpawnAt(),
       lab: labState,
       personaOnline: persona.online,
@@ -70,7 +70,7 @@ export function createApp({ auth, db, defs, scenarios, tm, conv, persona, lab, l
   app.post('/api/tasks/spawn', wrap(async (req, res) => {
     const t = await tm.spawn({ force: true });
     tm.rescheduleSpawn();
-    res.json(t ? { task: t } : { error: 'No eligible scenario could be started (lab down, or nothing unlocked left?)' });
+    res.json(t?.question ? { question: t.channel } : t ? { task: t } : { error: 'No eligible scenario could be started (lab down, or nothing unlocked left?)' });
   }));
   app.post('/api/tasks/:id/reply', wrap(async (req, res) => {
     const text = String(req.body?.text || '').trim().slice(0, 4000);
@@ -86,7 +86,6 @@ export function createApp({ auth, db, defs, scenarios, tm, conv, persona, lab, l
     const b = req.body || {};
     if (typeof b.paused === 'boolean') db.setSetting('paused', b.paused);
     if (typeof b.tailscale === 'boolean') db.setSetting('tailscale', b.tailscale);
-    if (typeof b.social === 'boolean') db.setSetting('social', b.social);
     if (typeof b.live === 'boolean' && b.live !== db.getSetting('live', false)) {
       db.setSetting('live', b.live);
       if (b.live) db.setSetting('liveSince', Date.now());

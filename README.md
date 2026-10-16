@@ -58,6 +58,12 @@ WantedBy=default.target
 - **Live mode** (header pill `○ live off`, or Settings): turn it on for longer sessions. Coworkers chat in channels every 20–40 min
   (pre-written, work-only, free) and some incidents unfold while you work on them: follow-ups, the CTO asking for an ETA,
   and a few faults that get worse. Add your own with a `timeline:` block in `scenario.yaml` and lines in `data-defs/chatter.yaml`.
+- **Slack basics**: post in any channel (`@name` pings someone, otherwise people just read it), DM anyone from the sidebar,
+  ↪ forward any message to a channel or person, click a name/avatar for their profile. People know about the tickets they
+  filed, so you can follow up in DMs, and saying "done" in their DM runs the check too.
+- **Coworkers**: Marcus (senior SRE, harsh), Kofi (DevOps, helpful, gives pointers), Diane (CTO, curt), Leo (junior dev who DMs
+  you Linux questions and reacts to whether your explanation is right). Personalities live in `data-defs/personas.yaml`,
+  Leo's questions in `data-defs/dm-openers.yaml`.
 - **⚙ Settings**: pause, ticket frequency (a new ticket every 5–20 min by default, only while the page is open), Tailscale access, and resetting the lab or a single host.
 - **Progress**: 18 skills in 3 tiers. Passing tickets raises mastery. Higher tiers unlock when their prerequisites reach 30. Mastery slowly drops after a week without practice. The scheduler favours your weakest unlocked skills.
 

@@ -32,7 +32,7 @@ for (const scn of selected) {
   const step = (s) => process.stdout.write(`\r\x1b[K${scn.id}: ${s}`);
   let ok = false, why = '';
   try {
-    if (!fs.existsSync(path.join(scn.dir, 'solve.sh'))) throw new Error('missing solve.sh');
+    if (!runner.exists(scn, 'solve.sh')) throw new Error('missing solve.sh');
     if (!fast) { step('reset'); resetHosts(scn.targets); }
     step('setup');
     const vars = await runner.setup(scn, resolveVars(scn));

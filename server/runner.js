@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { ROOT } from './config.js';
 import { mergeSetupOutput } from './scenarios.js';
@@ -25,10 +26,17 @@ function runScript(file, vars, { timeoutMs, extraEnv = {} }) {
 
 export function createRunner({ timeoutMs = 30_000, log = () => {} } = {}) {
   const fileOf = (scn, name) => path.join(scn.dir, name);
-  const exists = (scn, name) => fs.existsSync(fileOf(scn, name));
+  const exists = (scn, name) => (scn.inline ? name in scn.inline : fs.existsSync(fileOf(scn, name)));
 
   async function run(scn, name, vars, extraEnv) {
-    const r = await runScript(fileOf(scn, name), vars, { timeoutMs, extraEnv });
+    let file = fileOf(scn, name), tmp = null;
+    if (scn.inline) { // drills: script text lives in the scenario object
+      tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drill-'));
+      file = path.join(tmp, name);
+      fs.writeFileSync(file, scn.inline[name] ?? 'true');
+    }
+    let r;
+    try { r = await runScript(file, vars, { timeoutMs, extraEnv }); } finally { if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); }
     if (r.stderr.trim()) log(`[${scn.id}/${name}] stderr: ${r.stderr.trim().slice(0, 500)}`);
     if (INFRA_ERR.test(r.stderr)) throw new LabError(`lab unavailable: ${r.stderr.trim().split('\n')[0]}`);
     return r;

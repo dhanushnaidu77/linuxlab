@@ -1,0 +1,39 @@
+- id: drill-count
+  skill: files
+  difficulty: 1
+  persona: ana
+  channel: data
+  host: app01
+  title: Count the CSVs
+  message: "how many .csv files are in /srv/x?"
+  setup: "mkdir -p /srv/x"
+  expect: "ls /srv/x | wc -l"
+  answer: number
+  extract: "the number of files"
+  hints: [a, b, c]
+  solution: "use `ls | wc -l`"
+- id: drill-fix
+  skill: permissions
+  difficulty: 1
+  persona: raj
+  channel: it-helpdesk
+  host: app01
+  title: Make it executable
+  message: "make /tmp/x.sh executable"
+  setup: "touch /tmp/x.sh"
+  checks:
+    - ["test -x /tmp/x.sh", "still not executable"]
+  solve: "chmod +x /tmp/x.sh"
+  hints: [a, b, c]
+  solution: "chmod +x"
+- id: drill-bad
+  skill: files
+  difficulty: 1
+  persona: ana
+  channel: data
+  host: app01
+  title: no hints
+  message: "x"
+  setup: "true"
+  expect: "true"
+  answer: exact

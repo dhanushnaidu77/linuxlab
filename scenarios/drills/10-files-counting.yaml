@@ -1,0 +1,587 @@
+# Habit drills: counting files and lines, finding things, moving things around.
+# Each setup randomizes its data, so repeats have different answers.
+
+- id: d-count-csv
+  skill: files
+  difficulty: 1
+  persona: ana
+  channel: data
+  host: app01
+  title: How many CSV exports today?
+  message: "@dhan quick one: how many .csv files are in /srv/exports/today on app01? (just .csv, not the .gz or .tmp ones)"
+  setup: |
+    rm -rf /srv/exports/today && mkdir -p /srv/exports/today
+    for i in $(seq $((RANDOM % 20 + 8))); do touch /srv/exports/today/export-$i.csv; done
+    for i in $(seq $((RANDOM % 6 + 2))); do touch /srv/exports/today/old-$i.csv.gz /srv/exports/today/part-$i.tmp; done
+    mkdir -p /srv/exports/today/archive.csv
+  expect: "find /srv/exports/today -maxdepth 1 -type f -name '*.csv' | wc -l"
+  answer: number
+  extract: "the number of csv files"
+  hints:
+    - "List the directory filtered by the extension, then count the lines."
+    - "`ls *.csv | wc -l` works, but `find -maxdepth 1 -type f -name '*.csv'` is safer (a directory is also named *.csv!)."
+    - "find /srv/exports/today -maxdepth 1 -type f -name '*.csv' | wc -l"
+  solution: |
+    ```bash
+    find /srv/exports/today -maxdepth 1 -type f -name '*.csv' | wc -l
+    ```
+    `ls *.csv | wc -l` would also count the directory `archive.csv/` — `-type f` restricts to regular files.
+    `*.csv` doesn't match `*.csv.gz` because the glob must match to the end of the name.
+
+- id: d-count-files-recursive
+  skill: files
+  difficulty: 1
+  persona: priya
+  channel: platform
+  host: app01
+  title: How many files in the media library?
+  message: "hi @dhan! for the storage quote: how many files total are in /srv/media on app01, including all the subfolders? 🙏"
+  setup: |
+    rm -rf /srv/media && mkdir -p /srv/media
+    for d in images video docs images/2025 images/2026 video/raw docs/legal; do
+      mkdir -p /srv/media/$d
+      for i in $(seq $((RANDOM % 15 + 1))); do head -c $((RANDOM % 2000)) /dev/urandom > /srv/media/$d/item-$i.bin; done
+    done
+  expect: "find /srv/media -type f | wc -l"
+  answer: number
+  extract: "the number of files"
+  hints:
+    - "You need a recursive listing of regular files only (not directories), then a count."
+    - "`find <dir> -type f` walks all subdirectories; pipe it to `wc -l`."
+    - "find /srv/media -type f | wc -l"
+  solution: |
+    ```bash
+    find /srv/media -type f | wc -l
+    ```
+    `ls -R` output includes directory headers and blank lines, so counting it is wrong. `find -type d` would count folders.
+
+- id: d-count-dirs
+  skill: files
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: How many project folders?
+  message: "how many project directories are directly inside /srv/projects on app01? just the top level, not nested ones"
+  setup: |
+    rm -rf /srv/projects && mkdir -p /srv/projects
+    for i in $(seq $((RANDOM % 12 + 4))); do mkdir -p /srv/projects/proj-$i/src/lib; touch /srv/projects/proj-$i/README.md; done
+    touch /srv/projects/notes.txt /srv/projects/index.md
+  expect: "find /srv/projects -mindepth 1 -maxdepth 1 -type d | wc -l"
+  answer: number
+  extract: "the number of directories"
+  hints:
+    - "Only directories, only one level deep."
+    - "`find` has `-mindepth`/`-maxdepth` and `-type d`."
+    - "find /srv/projects -mindepth 1 -maxdepth 1 -type d | wc -l"
+  solution: |
+    ```bash
+    find /srv/projects -mindepth 1 -maxdepth 1 -type d | wc -l
+    ls -d /srv/projects/*/ | wc -l        # alternative: the trailing / only matches directories
+    ```
+
+- id: d-count-hidden
+  skill: files
+  difficulty: 1
+  persona: sam
+  channel: platform
+  host: jump01
+  title: Hidden files in the shared scratch dir
+  message: "@dhan how many HIDDEN files (dotfiles) are in /srv/scratch on jump01? someone's been stashing stuff."
+  setup: |
+    rm -rf /srv/scratch && mkdir -p /srv/scratch
+    for i in $(seq $((RANDOM % 8 + 2))); do touch /srv/scratch/.stash-$i; done
+    for i in $(seq $((RANDOM % 10 + 5))); do touch /srv/scratch/visible-$i.txt; done
+  expect: "find /srv/scratch -maxdepth 1 -type f -name '.*' | wc -l"
+  answer: number
+  extract: "the number of hidden files"
+  hints:
+    - "Plain `ls` hides files starting with a dot."
+    - "`ls -A` shows them (without . and ..); or find with -name '.*'."
+    - "find /srv/scratch -maxdepth 1 -type f -name '.*' | wc -l"
+  solution: |
+    ```bash
+    ls -A /srv/scratch | grep '^\.' | wc -l
+    find /srv/scratch -maxdepth 1 -type f -name '.*' | wc -l
+    ```
+    `ls -a` also lists `.` and `..`; `-A` ("almost all") doesn't.
+
+- id: d-csv-rows
+  skill: text-processing
+  difficulty: 1
+  persona: ana
+  channel: data
+  host: app01
+  title: How many customer rows?
+  message: "@dhan how many customers are in /srv/data/customers.csv on app01? (rows, the header doesn't count)"
+  setup: |
+    mkdir -p /srv/data; f=/srv/data/customers.csv
+    echo "id,name,email,country" > $f
+    for i in $(seq $((RANDOM % 900 + 100))); do echo "$i,cust$i,c$i@example.com,XX" >> $f; done
+  expect: "echo $(( $(wc -l < /srv/data/customers.csv) - 1 ))"
+  answer: number
+  extract: "the number of rows"
+  hints:
+    - "Count the lines, then account for the header."
+    - "`wc -l < file` prints just the number. Or skip the header with `tail -n +2`."
+    - "tail -n +2 /srv/data/customers.csv | wc -l"
+  solution: |
+    ```bash
+    tail -n +2 /srv/data/customers.csv | wc -l     # +2 = start from line 2
+    echo $(( $(wc -l < /srv/data/customers.csv) - 1 ))
+    ```
+    `wc -l file` prints "N file"; `wc -l < file` prints just N (handy in scripts).
+
+- id: d-total-lines
+  skill: text-processing
+  difficulty: 1
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Total lines across batch logs
+  message: "@dhan total number of lines across ALL the .log files in /var/log/darkroom/batch on app01. one number."
+  setup: |
+    rm -rf /var/log/darkroom/batch && mkdir -p /var/log/darkroom/batch
+    for j in $(seq $((RANDOM % 5 + 3))); do
+      for i in $(seq $((RANDOM % 300 + 20))); do echo "job $j step $i ok"; done > /var/log/darkroom/batch/job-$j.log
+    done
+    echo "not a log" > /var/log/darkroom/batch/README
+  expect: "cat /var/log/darkroom/batch/*.log | wc -l"
+  answer: number
+  extract: "the total number of lines"
+  hints:
+    - "wc can take several files at once, or you can concatenate them first."
+    - "`wc -l *.log` prints a total line at the end; `cat *.log | wc -l` gives just the number."
+    - "cat /var/log/darkroom/batch/*.log | wc -l"
+  solution: |
+    ```bash
+    wc -l /var/log/darkroom/batch/*.log          # per file + "total"
+    cat /var/log/darkroom/batch/*.log | wc -l     # just the number
+    ```
+
+- id: d-biggest-media
+  skill: files
+  difficulty: 2
+  persona: ana
+  channel: data
+  host: app01
+  title: Biggest file anywhere under /srv/media
+  message: "@dhan which file is the biggest anywhere under /srv/media on app01 (any subfolder)? name is enough"
+  setup: |
+    rm -rf /srv/media && mkdir -p /srv/media/{a,b,c/d,e/f/g}
+    for d in a b c/d e/f/g; do for i in 1 2 3 4; do head -c $((RANDOM % 800 + 10))K /dev/urandom > /srv/media/$d/clip-${d//\//-}-$i.mp4; done; done
+    dirs=(a b c/d e/f/g); d=${dirs[$((RANDOM % 4))]}
+    head -c 1500K /dev/urandom > /srv/media/$d/master-$RANDOM.mov
+  expect: "find /srv/media -type f -printf '%s %f\\n' | sort -n | tail -1 | cut -d' ' -f2"
+  answer: regex
+  extract: "the file name"
+  secret: "The biggest file is named {{EXPECT}}."
+  hints:
+    - "You need sizes of files in all subdirectories, sorted."
+    - "`find -type f -printf '%s %p\\n' | sort -n | tail -1`, or `du -a | sort -n | tail`."
+    - "find /srv/media -type f -printf '%s %p\\n' | sort -n | tail -1"
+  solution: |
+    ```bash
+    find /srv/media -type f -printf '%s %p\n' | sort -n | tail -1
+    du -ah /srv/media | sort -h | tail -3            # du counts disk blocks, close enough usually
+    ls -lSR /srv/media | head                        # -S sorts, but per directory only
+    ```
+
+- id: d-newest-file
+  skill: files
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: Latest file in the incoming folder
+  message: "what's the most recently modified file in /srv/incoming on app01? need the name"
+  setup: |
+    rm -rf /srv/incoming && mkdir -p /srv/incoming
+    for i in $(seq 15); do f=/srv/incoming/upload-$RANDOM.json; echo '{}' > $f; touch -d "-$((RANDOM % 5000 + 60)) minutes" $f; done
+    f=/srv/incoming/upload-$RANDOM-latest.json; echo '{}' > $f; touch -d "-$((RANDOM % 50 + 1)) minutes" $f
+  expect: "ls -t /srv/incoming | head -1"
+  answer: regex
+  extract: "the file name"
+  hints:
+    - "ls can sort by modification time."
+    - "`ls -t` sorts newest first; `-l` to see the dates; `-r` reverses."
+    - "ls -lt /srv/incoming | head -3"
+  solution: |
+    ```bash
+    ls -lt /srv/incoming | head -3      # newest first
+    ls -ltr /srv/incoming | tail -3     # same thing, newest at the bottom (nice for long dirs)
+    ```
+
+- id: d-oldest-file
+  skill: files
+  difficulty: 1
+  persona: raj
+  channel: it-helpdesk
+  host: db01
+  title: Oldest file in the inbox
+  message: "Hi @dhan, which file in /srv/archive/inbox on db01 is the OLDEST (by modification time)? thanks a ton!"
+  setup: |
+    rm -rf /srv/archive/inbox && mkdir -p /srv/archive/inbox
+    for i in $(seq 12); do f=/srv/archive/inbox/scan-$RANDOM.pdf; touch $f; touch -d "-$((RANDOM % 300 + 1)) days" $f; done
+  expect: "ls -tr /srv/archive/inbox | head -1"
+  answer: regex
+  extract: "the file name"
+  hints:
+    - "Sort by modification time, oldest first."
+    - "`ls -t` is newest first; add `-r` to reverse."
+    - "ls -ltr /srv/archive/inbox | head -2"
+  solution: |
+    ```bash
+    ls -ltr /srv/archive/inbox | head -2
+    find /srv/archive/inbox -type f -printf '%T@ %f\n' | sort -n | head -1
+    ```
+
+- id: d-empty-files
+  skill: files
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: How many empty upload files?
+  message: "@dhan bug hunting: how many EMPTY files (0 bytes) are in /srv/uploads/tmp on app01?"
+  setup: |
+    rm -rf /srv/uploads/tmp && mkdir -p /srv/uploads/tmp
+    for i in $(seq $((RANDOM % 10 + 3))); do : > /srv/uploads/tmp/broken-$i.part; done
+    for i in $(seq $((RANDOM % 10 + 5))); do echo data > /srv/uploads/tmp/ok-$i.part; done
+  expect: "find /srv/uploads/tmp -type f -empty | wc -l"
+  answer: number
+  extract: "the number of empty files"
+  hints:
+    - "find can test whether a file is empty."
+    - "`find <dir> -type f -empty` — or `-size 0`."
+    - "find /srv/uploads/tmp -type f -empty | wc -l"
+  solution: |
+    ```bash
+    find /srv/uploads/tmp -type f -empty | wc -l
+    find /srv/uploads/tmp -type f -empty -delete      # if you wanted to clean them up
+    ```
+
+- id: d-files-over-1m
+  skill: files
+  difficulty: 2
+  persona: ana
+  channel: data
+  host: app01
+  title: How many files over 1 MB?
+  message: "@dhan how many files under /srv/datasets on app01 are bigger than 1 MB?"
+  setup: |
+    rm -rf /srv/datasets && mkdir -p /srv/datasets/{raw,clean}
+    for i in $(seq $((RANDOM % 6 + 2))); do head -c $((RANDOM % 900 + 1100))K /dev/zero > /srv/datasets/raw/big-$i.parquet; done
+    for i in $(seq $((RANDOM % 10 + 5))); do head -c $((RANDOM % 900 + 1))K /dev/zero > /srv/datasets/clean/small-$i.parquet; done
+  expect: "find /srv/datasets -type f -size +1M | wc -l"
+  answer: number
+  extract: "the number of files"
+  hints:
+    - "find can filter by size."
+    - "`-size +1M` means more than 1 MiB (find rounds up to whole units — `-size +1024k` is stricter)."
+    - "find /srv/datasets -type f -size +1M | wc -l"
+  solution: |
+    ```bash
+    find /srv/datasets -type f -size +1M | wc -l
+    find /srv/datasets -type f -size +1M -exec ls -lh {} +     # see them
+    ```
+    Units: `c` bytes, `k` KiB, `M` MiB, `G` GiB. `+` = more than, `-` = less than.
+
+- id: d-files-by-owner
+  skill: files
+  difficulty: 1
+  persona: sam
+  channel: platform
+  host: app01
+  title: Files owned by omar
+  message: "@dhan omar is leaving. how many files under /srv/shared on app01 does he own?"
+  setup: |
+    for u in omar grace; do id $u >/dev/null 2>&1 || useradd -m $u; done
+    rm -rf /srv/shared && mkdir -p /srv/shared/{team,omar-stuff,misc}
+    for i in $(seq $((RANDOM % 15 + 3))); do f=/srv/shared/$(shuf -n1 -e team omar-stuff misc)/o-$i.doc; touch $f; chown omar $f; done
+    for i in $(seq $((RANDOM % 15 + 3))); do f=/srv/shared/$(shuf -n1 -e team omar-stuff misc)/g-$i.doc; touch $f; chown grace $f; done
+  expect: "find /srv/shared -type f -user omar | wc -l"
+  answer: number
+  extract: "the number of files"
+  hints:
+    - "find can match on file owner."
+    - "`find <dir> -user <name>` (and `-group`, `-nouser` for orphans)."
+    - "find /srv/shared -type f -user omar | wc -l"
+  solution: |
+    ```bash
+    find /srv/shared -type f -user omar | wc -l
+    find /srv/shared -user omar -exec chown grace {} +     # e.g. hand them over later
+    ```
+
+- id: d-modified-last-day
+  skill: files
+  difficulty: 2
+  persona: ana
+  channel: data
+  host: app01
+  title: Reports changed in the last 24h
+  message: "@dhan how many report files in /srv/reports on app01 were modified in the last 24 hours?"
+  setup: |
+    rm -rf /srv/reports/r && mkdir -p /srv/reports/r
+    for i in $(seq $((RANDOM % 8 + 2))); do f=/srv/reports/r/fresh-$i.csv; touch $f; touch -d "-$((RANDOM % 20 + 1)) hours" $f; done
+    for i in $(seq $((RANDOM % 12 + 3))); do f=/srv/reports/r/old-$i.csv; touch $f; touch -d "-$((RANDOM % 30 + 2)) days" $f; done
+  expect: "find /srv/reports/r -type f -mtime -1 | wc -l"
+  answer: number
+  extract: "the number of files"
+  hints:
+    - "find can filter on modification time."
+    - "`-mtime -1` = modified less than 1×24h ago; `-mmin -1440` is the same in minutes."
+    - "find /srv/reports -type f -mtime -1 | wc -l"
+  solution: |
+    ```bash
+    find /srv/reports -type f -mtime -1 | wc -l
+    find /srv/reports -type f -newermt '24 hours ago' | wc -l
+    ```
+
+- id: d-word-occurrences
+  skill: text-processing
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: How many timeouts (occurrences, not lines)?
+  message: "@dhan how many times does the word 'timeout' appear in /var/log/darkroom/gateway.log on app01? occurrences, not lines. some lines have several."
+  setup: |
+    f=/var/log/darkroom/gateway.log; : > $f
+    for i in $(seq 400); do
+      case $((RANDOM % 6)) in
+        0) echo "req $i upstream timeout after 3s" ;;
+        1) echo "req $i timeout on connect, retry timeout on read" ;;
+        *) echo "req $i ok 200" ;;
+      esac >> $f
+    done
+  expect: "grep -o 'timeout' /var/log/darkroom/gateway.log | wc -l"
+  answer: number
+  extract: "the number of occurrences"
+  hints:
+    - "`grep -c` counts LINES, not occurrences."
+    - "`grep -o` prints every match on its own line — then count those."
+    - "grep -o timeout /var/log/darkroom/gateway.log | wc -l"
+  solution: |
+    ```bash
+    grep -c timeout gateway.log            # lines containing it (wrong here)
+    grep -o timeout gateway.log | wc -l    # every occurrence
+    ```
+
+- id: d-du-backups
+  skill: disks
+  difficulty: 1
+  persona: priya
+  channel: platform
+  host: db01
+  title: How big is the backup folder?
+  message: "hi @dhan, how big is /srv/backups on db01 in megabytes? roughly is fine 😊"
+  setup: |
+    rm -rf /srv/backups && mkdir -p /srv/backups/{daily,weekly}
+    for i in $(seq $((RANDOM % 5 + 2))); do head -c $((RANDOM % 8 + 2))M /dev/zero > /srv/backups/daily/db-$i.dump; done
+    for i in $(seq $((RANDOM % 3 + 1))); do head -c $((RANDOM % 10 + 5))M /dev/zero > /srv/backups/weekly/db-$i.dump; done
+  expect: "du -sm /srv/backups | cut -f1"
+  answer: number
+  tolerance: 2
+  extract: "the size in MB"
+  hints:
+    - "There's a disk-usage command that can summarise a whole directory."
+    - "`du -s` summarises; `-h` human-readable, `-m` in megabytes."
+    - "du -sh /srv/backups"
+  solution: |
+    ```bash
+    du -sh /srv/backups          # human readable
+    du -sm /srv/backups          # in MB
+    du -h --max-depth=1 /srv/backups | sort -h   # per subfolder
+    ```
+
+- id: d-which-file-has
+  skill: text-processing
+  difficulty: 1
+  persona: leah
+  channel: netops
+  host: web01
+  title: Which site config uses port 8443?
+  message: "@dhan which file in /etc/darkroom/sites on web01 has `port = 8443` in it?"
+  setup: |
+    rm -rf /etc/darkroom/sites && mkdir -p /etc/darkroom/sites
+    names=(billing portal admin status docs shop api blog); hit=${names[$((RANDOM % 8))]}
+    for n in "${names[@]}"; do p=$((RANDOM % 900 + 8000)); [ $p = 8443 ] && p=8444; [ $n = $hit ] && p=8443; printf 'name = %s\nport = %s\n' $n $p > /etc/darkroom/sites/$n.conf; done
+  expect: "grep -l 'port = 8443' /etc/darkroom/sites/* | xargs -n1 basename"
+  answer: regex
+  extract: "the file name"
+  hints:
+    - "Search file contents, and print only the names of files that match."
+    - "`grep -l` lists matching file names; add `-r` to search a whole tree."
+    - "grep -l 'port = 8443' /etc/darkroom/sites/*"
+  solution: |
+    ```bash
+    grep -l 'port = 8443' /etc/darkroom/sites/*
+    grep -rn '8443' /etc/darkroom/       # -n shows line numbers, -r recursive
+    ```
+
+- id: d-clean-old-tmp
+  skill: files
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Clean up old cache files (carefully)
+  message: "@dhan delete the .tmp files older than 7 days in /srv/cache on app01. ONLY those. newer .tmp and everything else stays."
+  setup: |
+    rm -rf /srv/cache && mkdir -p /srv/cache/sub
+    for i in $(seq 8); do f=/srv/cache/old-$i.tmp; touch $f; touch -d "-$((RANDOM % 20 + 8)) days" $f; done
+    for i in $(seq 3); do f=/srv/cache/sub/old-sub-$i.tmp; touch $f; touch -d "-15 days" $f; done
+    for i in $(seq 5); do f=/srv/cache/new-$i.tmp; touch $f; touch -d "-$((RANDOM % 5 + 1)) days" $f; done
+    for i in $(seq 4); do f=/srv/cache/keep-$i.dat; touch $f; touch -d "-30 days" $f; done
+  checks:
+    - ["[ -z \"$(find /srv/cache -name '*.tmp' -mtime +7)\" ]", "there are still .tmp files older than 7 days in /srv/cache"]
+    - ["[ $(find /srv/cache -name 'new-*.tmp' | wc -l) -eq 5 ]", "you deleted recent .tmp files too!"]
+    - ["[ $(find /srv/cache -name 'keep-*.dat' | wc -l) -eq 4 ]", "the .dat files are gone — I said ONLY old .tmp files"]
+  solve: "find /srv/cache -name '*.tmp' -mtime +7 -delete"
+  hints:
+    - "find can combine a name pattern and an age test, and delete what it finds."
+    - "Run it first WITHOUT -delete to see what matches. `-mtime +7` = older than 7 days."
+    - "find /srv/cache -name '*.tmp' -mtime +7 -print   then the same with -delete"
+  solution: |
+    ```bash
+    find /srv/cache -name '*.tmp' -mtime +7 -print     # dry run first!
+    find /srv/cache -name '*.tmp' -mtime +7 -delete
+    ```
+    Put `-delete` last — find evaluates left to right, and `-delete` before the tests would delete everything.
+
+- id: d-rename-jpeg
+  skill: files
+  difficulty: 2
+  persona: priya
+  channel: platform
+  host: web01
+  title: Rename .jpeg files to .jpg
+  message: "hi @dhan, the new CMS only accepts .jpg 😅 can you rename every .jpeg in /var/www/darkroom/img on web01 to .jpg? same names otherwise 🙏"
+  setup: |
+    rm -rf /var/www/darkroom/img && mkdir -p /var/www/darkroom/img
+    for i in $(seq $((RANDOM % 10 + 5))); do echo img > "/var/www/darkroom/img/photo-$i.jpeg"; done
+    echo img > /var/www/darkroom/img/logo.png; echo img > /var/www/darkroom/img/banner.jpg
+  checks:
+    - ["[ $(ls /var/www/darkroom/img | grep -c '\\.jpeg$') -eq 0 ]", "there are still .jpeg files"]
+    - ["ls /var/www/darkroom/img/photo-1.jpg /var/www/darkroom/img/banner.jpg /var/www/darkroom/img/logo.png", "some files are missing or got the wrong name"]
+  solve: "cd /var/www/darkroom/img && for f in *.jpeg; do mv -- \"$f\" \"${f%.jpeg}.jpg\"; done"
+  hints:
+    - "Loop over the files and rename each one."
+    - "In bash, `${f%.jpeg}` strips the suffix from a variable."
+    - "for f in *.jpeg; do mv -- \"$f\" \"${f%.jpeg}.jpg\"; done"
+  solution: |
+    ```bash
+    cd /var/www/darkroom/img
+    for f in *.jpeg; do mv -- "$f" "${f%.jpeg}.jpg"; done
+    ```
+    `${var%pattern}` removes the shortest match from the end; `${var#pattern}` from the start.
+    Alternative: `rename 's/\.jpeg$/.jpg/' *.jpeg` (perl rename, if installed).
+
+- id: d-move-pdfs
+  skill: files
+  difficulty: 1
+  persona: raj
+  channel: it-helpdesk
+  host: app01
+  title: Move the PDFs into the archive
+  message: "Hi @dhan, could you move all the PDFs from /srv/inbox on app01 into /srv/archive/pdf? (that folder may not exist yet) thanks a ton!"
+  setup: |
+    rm -rf /srv/inbox /srv/archive/pdf && mkdir -p /srv/inbox
+    for i in $(seq $((RANDOM % 8 + 3))); do echo pdf > /srv/inbox/scan-$i.pdf; done
+    echo txt > /srv/inbox/notes.txt
+  checks:
+    - ["[ -d /srv/archive/pdf ] && [ $(ls /srv/archive/pdf/*.pdf | wc -l) -ge 3 ]", "I don't see the PDFs in /srv/archive/pdf"]
+    - ["! ls /srv/inbox/*.pdf", "there are still PDFs left in /srv/inbox"]
+    - ["test -f /srv/inbox/notes.txt", "notes.txt was moved/deleted too — only the PDFs please"]
+  solve: "mkdir -p /srv/archive/pdf && mv /srv/inbox/*.pdf /srv/archive/pdf/"
+  hints:
+    - "Make sure the destination exists first, then move with a wildcard."
+    - "`mkdir -p` creates parents and doesn't complain if it exists."
+    - "mkdir -p /srv/archive/pdf && mv /srv/inbox/*.pdf /srv/archive/pdf/"
+  solution: |
+    ```bash
+    sudo mkdir -p /srv/archive/pdf
+    sudo mv /srv/inbox/*.pdf /srv/archive/pdf/
+    ```
+    Trailing `/` on the destination makes mv fail loudly if it isn't a directory (instead of renaming).
+
+- id: d-make-symlink
+  skill: files
+  difficulty: 1
+  persona: tom
+  channel: backend
+  host: app01
+  title: Put drctl on the PATH
+  message: "can you make `drctl` runnable from anywhere on app01? the binary is /opt/darkroom/bin/drctl-2.3. a symlink in /usr/local/bin called drctl pls"
+  setup: |
+    mkdir -p /opt/darkroom/bin; rm -f /usr/local/bin/drctl
+    printf '#!/bin/bash\necho "drctl 2.3"\n' > /opt/darkroom/bin/drctl-2.3; chmod 755 /opt/darkroom/bin/drctl-2.3
+  checks:
+    - ["test -L /usr/local/bin/drctl", "/usr/local/bin/drctl isn't a symlink"]
+    - ["[ \"$(readlink -f /usr/local/bin/drctl)\" = /opt/darkroom/bin/drctl-2.3 ]", "the symlink doesn't point at /opt/darkroom/bin/drctl-2.3"]
+    - ["drctl | grep -q 2.3", "running `drctl` doesn't work"]
+  solve: "ln -s /opt/darkroom/bin/drctl-2.3 /usr/local/bin/drctl"
+  hints:
+    - "A symbolic link is created with `ln` and a specific flag."
+    - "Order is `ln -s TARGET LINK_NAME` — target first."
+    - "sudo ln -s /opt/darkroom/bin/drctl-2.3 /usr/local/bin/drctl"
+  solution: |
+    ```bash
+    sudo ln -s /opt/darkroom/bin/drctl-2.3 /usr/local/bin/drctl
+    ls -l /usr/local/bin/drctl && drctl
+    ```
+    Mnemonic: `ln -s` works like `cp` — source first, then the new name.
+
+- id: d-copy-preserve
+  skill: files
+  difficulty: 2
+  persona: marcus
+  channel: platform
+  host: app01
+  title: Back up a config, keeping its timestamps
+  message: "@dhan before we touch it: copy /etc/darkroom/api.conf to /root/backups/api.conf on app01. keep the original timestamps and permissions — I want to know when it was last changed."
+  setup: |
+    rm -rf /root/backups; touch -d '2026-09-03 14:22' /etc/darkroom/api.conf
+  checks:
+    - ["cmp /etc/darkroom/api.conf /root/backups/api.conf", "/root/backups/api.conf doesn't exist or differs"]
+    - ["[ $(stat -c %Y /etc/darkroom/api.conf) = $(stat -c %Y /root/backups/api.conf) ]", "the copy got a new modification time — the timestamp is lost"]
+    - ["[ $(stat -c %a /etc/darkroom/api.conf) = $(stat -c %a /root/backups/api.conf) ]", "the copy has different permissions"]
+  solve: "mkdir -p /root/backups && cp -p /etc/darkroom/api.conf /root/backups/api.conf"
+  hints:
+    - "Plain cp gives the new file the current time."
+    - "cp has a flag to preserve mode, ownership and timestamps (and `-a` for archives)."
+    - "sudo mkdir -p /root/backups && sudo cp -p /etc/darkroom/api.conf /root/backups/"
+  solution: |
+    ```bash
+    sudo mkdir -p /root/backups
+    sudo cp -p /etc/darkroom/api.conf /root/backups/      # -p: mode, ownership, timestamps
+    sudo stat -c '%y %n' /etc/darkroom/api.conf /root/backups/api.conf
+    ```
+    `cp -a` = `-dR --preserve=all` — the right choice for copying whole directory trees.
+
+- id: d-make-tarball
+  skill: files
+  difficulty: 2
+  persona: ana
+  channel: data
+  host: app01
+  title: Tarball of the batch logs
+  message: "@dhan can you pack all the .log files from /var/log/darkroom/batch into /srv/backups/batch-logs.tar.gz on app01? I need to send them to a vendor"
+  setup: |
+    rm -rf /var/log/darkroom/batch /srv/backups/batch-logs.tar.gz && mkdir -p /var/log/darkroom/batch /srv/backups
+    for j in $(seq $((RANDOM % 4 + 2))); do echo "job $j" > /var/log/darkroom/batch/job-$j.log; done
+  checks:
+    - ["gzip -t /srv/backups/batch-logs.tar.gz", "/srv/backups/batch-logs.tar.gz doesn't exist or isn't a valid gzip"]
+    - ["[ $(tar tzf /srv/backups/batch-logs.tar.gz | grep -c 'job-.*\\.log$') -eq $(ls /var/log/darkroom/batch/*.log | wc -l) ]", "the tarball doesn't contain all the .log files"]
+  solve: "tar czf /srv/backups/batch-logs.tar.gz -C /var/log/darkroom/batch $(cd /var/log/darkroom/batch && ls *.log)"
+  hints:
+    - "tar creates archives; z adds gzip compression."
+    - "`tar czf OUTPUT.tar.gz FILES...` — c create, z gzip, f file. `tar tzf` lists to verify."
+    - "sudo tar czf /srv/backups/batch-logs.tar.gz -C /var/log/darkroom/batch ."
+  solution: |
+    ```bash
+    sudo tar czf /srv/backups/batch-logs.tar.gz -C /var/log/darkroom/batch .
+    tar tzf /srv/backups/batch-logs.tar.gz            # verify
+    ```
+    `-C dir` makes paths inside the archive relative to that dir (no `var/log/...` prefix).

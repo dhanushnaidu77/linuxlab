@@ -21,6 +21,33 @@ export function seededRng(seed) {
 
 const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
 
+// ---- drill packs: compact one-host drills defined inline in scenarios/drills/*.yaml
+// redirections/pipes go on the opening line: the terminator must stand alone
+const heredoc = (host, body, after = '') => `on ${host} <<'__DRILL__'${after ? ' ' + after : ''}\n${String(body).trim()}\n__DRILL__`;
+const oneLine = `| tr '\\n' ' ' | sed 's/ *$//'`;
+const shq = (t) => `"${String(t).replace(/["\\$`]/g, '\\$&')}"`;
+
+function drillToScenario(d) {
+  const answerTask = !!d.answer;
+  const inline = {
+    'setup.sh': [heredoc(d.host, d.setup || 'true'), answerTask ? `echo "EXPECT=$(${heredoc(d.host, d.expect, oneLine)}\n)"` : ''].join('\n'),
+    'check.sh': answerTask ? 'exit 0' : (d.checks || []).map(([cmd, msg]) => heredoc(d.host, cmd, `>/dev/null 2>&1 || fail ${shq(msg)}`)).join('\n') + '\nexit 0',
+    'solve.sh': answerTask ? `echo "ANSWER=$(${heredoc(d.host, d.solve || d.expect, oneLine)}\n)"` : heredoc(d.host, d.solve || 'true'),
+  };
+  if (d.cleanup) inline['cleanup.sh'] = heredoc(d.host, d.cleanup);
+  return {
+    id: d.id, title: d.title, skills: d.skills || (d.skill ? [d.skill] : undefined), difficulty: d.difficulty,
+    channel: d.channel, persona: d.persona, targets: d.host ? [d.host] : undefined,
+    vars: { ...(d.vars || {}), ...(answerTask ? { EXPECT: { from_setup: true } } : {}) },
+    message: d.message,
+    secret_context: d.secret || (answerTask ? 'The correct answer is {{EXPECT}} (the requester only knows what they asked).' : 'The requester only knows what they described.'),
+    answer: answerTask ? { type: d.answer, extract: d.extract || 'the requested value', value: '{{EXPECT}}', ...(d.tolerance ? { tolerance: d.tolerance } : {}) } : undefined,
+    hints: d.hints, followup_minutes: d.followup_minutes, timeline: d.timeline,
+    inline, solutionText: d.solution || '',
+    _drillErrs: [!d.host && 'missing host', answerTask && !d.expect && 'answer drills need expect', !answerTask && !(d.checks || []).length && 'fix drills need checks'].filter(Boolean),
+  };
+}
+
 function validate(s, dir, defs) {
   const errs = [];
   for (const k of ['id', 'title', 'skills', 'difficulty', 'channel', 'persona', 'targets', 'message', 'secret_context', 'hints'])
@@ -41,10 +68,11 @@ function validate(s, dir, defs) {
       if (!t?.text && !t?.run) errs.push(`timeline[${i}] needs text and/or run`);
       if (t?.text && !defs.personas.has(t.persona)) errs.push(`timeline[${i}] unknown persona ${t?.persona}`);
       if (t?.channel && !defs.channels.has(t.channel)) errs.push(`timeline[${i}] unknown channel ${t.channel}`);
-      if (t?.run && !fs.existsSync(path.join(dir, t.run))) errs.push(`timeline[${i}] missing script ${t.run}`);
+      if (t?.run && !s.inline && !fs.existsSync(path.join(dir, t.run))) errs.push(`timeline[${i}] missing script ${t.run}`);
     });
   }
-  for (const f of ['setup.sh', 'check.sh']) if (!fs.existsSync(path.join(dir, f))) errs.push(`missing ${f}`);
+  if (s.inline) errs.push(...s._drillErrs);
+  else for (const f of ['setup.sh', 'check.sh']) if (!fs.existsSync(path.join(dir, f))) errs.push(`missing ${f}`);
   const declared = new Set(Object.keys(s.vars || {}));
   const used = [s.message, s.secret_context, s.answer?.value || '', ...(Array.isArray(s.timeline) ? s.timeline.map((t) => t?.text || '') : [])].join(' ').matchAll(/\{\{\s*(\w+)\s*\}\}/g);
   for (const [, v] of used) if (!declared.has(v)) errs.push(`undeclared var ${v}`);
@@ -79,6 +107,22 @@ export function loadScenarios(root, defs) {
     if (!errs.length && scenarios.has(s.id)) errs.push(`duplicate id ${s.id}`);
     if (errs.length) { warnings.push(`${name}: ${errs.join('; ')}`); continue; }
     scenarios.set(s.id, { followup_minutes: s.alert ? 8 : 20, vars: {}, ...s, dir });
+  }
+  const drillDir = path.join(root, 'drills');
+  if (fs.existsSync(drillDir)) {
+    for (const file of fs.readdirSync(drillDir).filter((f) => f.endsWith('.yaml')).sort()) {
+      let pack;
+      try { pack = YAML.parse(fs.readFileSync(path.join(drillDir, file), 'utf8')) || []; }
+      catch (e) { warnings.push(`drills/${file}: invalid yaml (${e.message.split('\n')[0]})`); continue; }
+      for (const d of pack) {
+        const s = drillToScenario(d || {});
+        const errs = validate(s, drillDir, defs);
+        if (!errs.length && scenarios.has(s.id)) errs.push(`duplicate id ${s.id}`);
+        if (errs.length) { warnings.push(`drills/${file} ${d?.id ?? '?'}: ${errs.join('; ')}`); continue; }
+        delete s._drillErrs;
+        scenarios.set(s.id, { followup_minutes: 20, ...Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined)), dir: drillDir });
+      }
+    }
   }
   return { scenarios, warnings };
 }

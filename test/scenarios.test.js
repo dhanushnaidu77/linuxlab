@@ -16,7 +16,7 @@ test('defs load personas, channels, skills', () => {
 
 test('valid scenario loads, invalid ones are skipped with warnings', () => {
   const { scenarios, warnings } = loadScenarios(fixtures, defs);
-  assert.deepEqual([...scenarios.keys()], ['good']);
+  assert.deepEqual([...scenarios.keys()].filter((k) => !k.startsWith('drill-')), ['good']);
   assert.ok(scenarios.get('good').dir.endsWith('files/good'));
   const w = warnings.join('\n');
   assert.match(w, /bad-yaml/);
@@ -44,4 +44,23 @@ test('mergeSetupOutput only takes declared from_setup vars', () => {
   const scn = loadScenarios(fixtures, defs).scenarios.get('good');
   const v = mergeSetupOutput(scn, { NAME: 'alpha' }, 'noise\nSECRET=abc123\nNAME=hacked\nOTHER=1\n');
   assert.deepEqual(v, { NAME: 'alpha', SECRET: 'abc123' });
+});
+
+test('drill packs become scenarios with inline scripts; invalid drills are reported', () => {
+  const { scenarios, warnings } = loadScenarios(fixtures, defs);
+  const c = scenarios.get('drill-count');
+  assert.ok(c, 'drill-count loaded');
+  assert.equal(c.answer.type, 'number');
+  assert.equal(c.answer.value, '{{EXPECT}}');
+  assert.ok(c.vars.EXPECT.from_setup);
+  assert.match(c.inline['setup.sh'], /on app01 <<'__DRILL__'/);
+  assert.match(c.inline['setup.sh'], /EXPECT=/);
+  assert.equal(c.inline['check.sh'].trim(), 'exit 0');
+  assert.match(c.inline['solve.sh'], /ANSWER=/);
+  assert.equal(c.solutionText, 'use `ls | wc -l`');
+  const f = scenarios.get('drill-fix');
+  assert.match(f.inline['check.sh'], /test -x \/tmp\/x.sh/);
+  assert.match(f.inline['check.sh'], /<<'__DRILL__' >\/dev\/null 2>&1 \|\| fail "still not executable"\n/);
+  assert.ok(!scenarios.has('drill-bad'));
+  assert.match(warnings.join('\n'), /drill-bad.*hints/);
 });

@@ -17,6 +17,7 @@ const QUESTION_SHARE = 0.15;
 const channelFor = (scn) => (scn.channel === 'dm' ? `dm:${scn.persona}` : scn.channel);
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
 const defaultReadSolution = (scn) => {
+  if (scn.inline) return scn.solutionText || '_No solution notes for this drill._';
   const f = path.join(scn.dir, 'solution.md');
   return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '_No solution notes for this scenario._';
 };

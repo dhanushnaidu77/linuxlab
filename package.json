@@ -2,6 +2,7 @@
   "name": "linuxlab-console",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "LAN-only Linux/networking practice console: coworker chat tasks + browser terminal into a containerized lab",
   "type": "module",
   "engines": {

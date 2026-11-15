@@ -17,6 +17,8 @@ The lab has no internet access and can't reach your LAN.
 Requirements: Docker with Compose v2, Node.js 18.19 or newer, and build tools for the native modules (`build-essential`, `python3`).
 
 ```bash
+git clone https://github.com/dhanushnaidu77/linuxlab.git
+cd linuxlab
 npm install
 scripts/set-password                 # console password → .env (bcrypt hash + session secret)
 scripts/lab build                    # build the 6 lab images (a few minutes the first time)
@@ -26,6 +28,12 @@ npm start                            # http://<this-machine>:8088
 
 Optional: add `ANTHROPIC_API_KEY=...` to `.env` so coworkers reply naturally (Claude Haiku, fractions of a cent per message).
 Without a key, the console uses canned replies and keyword detection, and everything else works the same.
+
+The console only answers requests from loopback, `10.0.0.0/24` and Docker bridges. If your LAN uses a different range,
+change `RANGES` in `server/allowlist.js`, or you'll only be able to open it from the machine it runs on.
+
+The lab user on every host is `dhan` (passwordless sudo). It's set in `lab/base/Dockerfile` and referenced by the terminal
+command in `server/term.js` and some scenarios, so renaming it means a search and replace.
 
 If the host runs a firewall, allow the port from your LAN only, e.g. `sudo ufw allow from 10.0.0.0/24 to any port 8088 proto tcp`.
 
@@ -109,3 +117,7 @@ scripts/lab reset app01
 ```
 
 Design spec: `docs/superpowers/specs/2026-10-15-linuxlab-console-design.md`.
+
+## License
+
+[MIT](LICENSE)
